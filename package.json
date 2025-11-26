@@ -25,9 +25,11 @@
     "test": "vitest",
     "coverage": "vitest --coverage",
     "changeset-version": "changeset version && node scripts/version.mjs",
-    "changeset-publish": "pnpm build && TEST_DIST= pnpm vitest && changeset publish"
+    "changeset-publish": "pnpm build && TEST_DIST= pnpm vitest && changeset publish",
+    "prepare": "effect-language-service patch"
   },
   "dependencies": {
+    "@effect/schema": "latest",
     "effect": "latest"
   },
   "devDependencies": {

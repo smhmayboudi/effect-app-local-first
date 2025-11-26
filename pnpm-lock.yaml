@@ -13,6 +13,9 @@ importers:
 
   .:
     dependencies:
+      '@effect/schema':
+        specifier: latest
+        version: 0.75.5(effect@3.19.6)
       effect:
         specifier: latest
         version: 3.19.6
@@ -274,6 +277,12 @@ packages:
   '@effect/language-service@0.56.0':
     resolution: {integrity: sha512-gvJaHoeXMHAoA6+Xyj9Vdq52yDCs+ECLbKpHvxHtdJP/C0D9b3JFEfLjdVuw37zoWcYS856um4rgEYHlW2LSEQ==}
     hasBin: true
+
+  '@effect/schema@0.75.5':
+    resolution: {integrity: sha512-TQInulTVCuF+9EIbJpyLP6dvxbQJMphrnRqgexm/Ze39rSjfhJuufF7XvU3SxTgg3HnL7B/kpORTJbHhlE6thw==}
+    deprecated: this package has been merged into the main effect package
+    peerDependencies:
+      effect: ^3.9.2
 
   '@effect/vitest@0.27.0':
     resolution: {integrity: sha512-8bM7n9xlMUYw9GqPIVgXFwFm2jf27m/R7psI64PGpwU5+26iwyxp9eAXEsfT5S6lqztYfpQQ1Ubp5o6HfNYzJQ==}
@@ -2960,6 +2969,11 @@ snapshots:
       prettier-linter-helpers: 1.0.0
 
   '@effect/language-service@0.56.0': {}
+
+  '@effect/schema@0.75.5(effect@3.19.6)':
+    dependencies:
+      effect: 3.19.6
+      fast-check: 3.23.2
 
   '@effect/vitest@0.27.0(effect@3.19.6)(vitest@3.2.4(@types/node@22.19.1)(tsx@4.20.6))':
     dependencies:

@@ -1,6 +1,72 @@
-# Effect Package Template
+# Effect Local-First Framework
 
-This template provides a solid foundation for building scalable and maintainable TypeScript package with Effect. 
+This is a comprehensive local-first framework built with Effect-TS for developing distributed applications with real-time synchronization and
+conflict resolution. The framework provides a set of tools and abstractions for building applications that can work offline-first while
+maintaining synchronization capabilities.
+
+## Key Components
+
+  1. Core CRDTs (src/Core.ts):
+
+    - VectorClock: Implements vector clocks for tracking causality between distributed operations
+    - LWWRegister: Last-Writer-Wins register for storing single values with timestamp-based conflict resolution
+    - GSet: Grow-only Set (a CRDT that only allows adding elements, never removing)
+    - ORMap: Observed-Remove Map (a map that can add and remove entries with proper conflict resolution)
+
+  2. Hub Messaging System (src/Hub.ts):
+
+    - Asynchronous message hub allowing publishers to send messages and subscribers to receive them via streams
+    - Multiple strategies: unbounded, sliding, dropping, and backpressure
+    - Built-in backpressure handling and concurrency safety
+
+  3. Storage Layer (src/Storage.ts):
+
+    - Abstract storage backend interface with implementations for IndexedDB and in-memory storage
+    - Provides get, set, delete, clear, keys, and watch operations
+    - Supports real-time watching of key changes
+
+  4. Synchronization Engine (src/Sync.ts):
+
+    - WebSocket-based real-time synchronization between replicas
+    - Manual sync option for offline-only scenarios
+    - Conflict detection and status tracking (online/offline/syncing)
+
+  5. Framework Abstraction (src/Framework.ts):
+
+    - Main entry point with dependency injection using Effect's Layer system
+    - Collection classes that provide type-safe access to different CRDT types
+    - Automatic synchronization and vector clock management
+    - Configurable storage and sync backends
+
+## Architecture
+
+The framework uses Effect-TS's dependency injection pattern with the Layer system to provide a clean separation of concerns. The main services
+are:
+
+  - LocalFirst: Main service coordinating storage, sync, and hub services
+  - StorageService: Handles data persistence across different backends
+  - SyncService: Manages real-time synchronization between replicas
+  - HubService: Provides messaging capabilities
+
+## Examples
+
+The framework includes two example applications:
+
+  1. HubApp: Demonstrates the hub messaging system with event publishing and subscription
+  2. TodoApp: A complete todo application using ORMap for todos, LWWRegister for user profile, and GSet for user tags
+
+## Design Philosophy
+
+The framework emphasizes:
+  - Type safety through the Effect ecosystem
+  - Functional programming principles
+  - Robust offline-first capabilities
+  - Conflict-free replicated data types for automatic conflict resolution
+  - Modular architecture with pluggable components
+  - Real-time synchronization with WebSocket support
+
+This framework is designed for building distributed applications that need to work seamlessly in both online and offline scenarios while
+maintaining data consistency across multiple replicas.
 
 ## Running Code
 
@@ -29,3 +95,15 @@ To test the package:
 ```sh
 pnpm test
 ```
+
+## Hub Messaging System
+
+The framework includes a powerful Hub messaging system that allows:
+
+- Publishers to send messages of type A
+- Subscribers to receive messages via Stream<A>
+- Backpressure handling for robust message flow
+- Concurrency-safe operations for multiple publishers/subscribers
+- Configurable persistence strategies (unbounded, sliding, dropping, backpressure)
+
+For more details about the Hub system, see [docs/Hub.md](docs/Hub.md).
