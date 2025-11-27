@@ -21,6 +21,10 @@ export interface SyncOperation {
   // For reconciliation operations
   readonly serverClock?: VectorClock
   readonly operationVector?: VectorClock // The vector clock of the operation being reconciled
+  // For partial sync
+  readonly collection?: string // Collection name for partial sync
+  readonly tags?: Array<string> // Tags for categorizing data
+  readonly scope?: string // Scope/type of data
 }
 
 // Server reconciliation request structure
@@ -46,10 +50,20 @@ export interface ReconciliationResponse {
   }>
 }
 
+// Partial sync configuration
+export interface PartialSyncConfig {
+  readonly collections?: Array<string> // Specific collections to sync
+  readonly tags?: Array<string> // Tags to filter by
+  readonly scope?: string // Specific scope to sync
+  readonly since?: number // Sync operations since timestamp
+  readonly limit?: number // Maximum number of operations to sync
+}
+
 export interface SyncEngine {
   readonly push: (operations: Array<SyncOperation>) => Effect.Effect<void, SyncError>
-  readonly pull: () => Effect.Effect<Array<SyncOperation>, SyncError>
+  readonly pull: (config?: PartialSyncConfig) => Effect.Effect<Array<SyncOperation>, SyncError>
   readonly reconcile: (request: ReconciliationRequest) => Effect.Effect<ReconciliationResponse, SyncError>
+  readonly partialSync: (config: PartialSyncConfig) => Effect.Effect<void, SyncError>
   readonly conflicts: Stream.Stream<DataConflict, SyncError>
   readonly status: Stream.Stream<"online" | "offline" | "syncing", never>
   readonly connect: () => Effect.Effect<void, SyncError>
@@ -198,7 +212,7 @@ export const WebSocketSyncLive = (url: string) =>
           })
         })
 
-      const pull = (): Effect.Effect<Array<SyncOperation>, SyncError> =>
+      const pull = (config?: PartialSyncConfig): Effect.Effect<Array<SyncOperation>, SyncError> =>
         Effect.gen(function*() {
           if (!ws || ws.readyState !== WebSocket.OPEN) {
             return yield* Effect.fail(
@@ -213,7 +227,11 @@ export const WebSocketSyncLive = (url: string) =>
           return yield* Effect.async<Array<SyncOperation>, SyncError>((resume) => {
             try {
               const requestId = Math.random().toString(36).slice(2, 11)
-              ws!.send(JSON.stringify({ type: "pull", id: requestId }))
+              ws!.send(JSON.stringify({
+                type: "pull",
+                id: requestId,
+                config: config || {} // Send partial sync configuration
+              }))
 
               const timeout = setTimeout(() => {
                 resume(Effect.fail(
@@ -301,6 +319,60 @@ export const WebSocketSyncLive = (url: string) =>
           })
         })
 
+      const partialSync = (config: PartialSyncConfig): Effect.Effect<void, SyncError> =>
+        Effect.gen(function*() {
+          if (!ws || ws.readyState !== WebSocket.OPEN) {
+            return yield* Effect.fail(
+              new SyncError({
+                message: "WebSocket not connected",
+                code: "NOT_CONNECTED",
+                cause: null
+              })
+            )
+          }
+
+          yield* Queue.offer(statusQueue, "syncing")
+
+          return yield* Effect.async<void, SyncError>((resume) => {
+            try {
+              ws!.send(JSON.stringify({
+                type: "partial-sync",
+                config
+              }))
+
+              const timeout = setTimeout(() => {
+                resume(Effect.fail(
+                  new SyncError({
+                    message: "Partial sync operation timeout",
+                    code: "TIMEOUT",
+                    cause: null
+                  })
+                ))
+              }, 10000)
+
+              const messageHandler = (event: MessageEvent) => {
+                const data = JSON.parse(event.data)
+                if (data.type === "partial-sync-complete") {
+                  clearTimeout(timeout)
+                  ws!.removeEventListener("message", messageHandler)
+                  Queue.offer(statusQueue, "online").pipe(Effect.runPromise)
+                  resume(Effect.void)
+                }
+              }
+
+              ws!.addEventListener("message", messageHandler)
+            } catch (error) {
+              resume(Effect.fail(
+                new SyncError({
+                  message: "Failed to initiate partial sync",
+                  code: "PARTIAL_SYNC_ERROR",
+                  cause: error
+                })
+              ))
+            }
+          })
+        })
+
       // Start connection
       yield* connect()
 
@@ -308,6 +380,7 @@ export const WebSocketSyncLive = (url: string) =>
         push,
         pull,
         reconcile,
+        partialSync,
         conflicts: Stream.fromQueue(conflictQueue),
         status: Stream.fromQueue(statusQueue),
         connect,
@@ -321,13 +394,14 @@ export const ManualSyncLive = Layer.succeed(
   SyncService,
   {
     push: () => Effect.void,
-    pull: () => Effect.succeed([]),
+    pull: (config?: PartialSyncConfig) => Effect.succeed([]),
     reconcile: (request: ReconciliationRequest) =>
       Effect.succeed<ReconciliationResponse>({
         id: request.id,
         status: "accepted",
         resolvedState: request.clientState
       }),
+    partialSync: (config: PartialSyncConfig) => Effect.void,
     conflicts: Stream.empty,
     status: Stream.succeed("offline" as const),
     connect: () => Effect.void,

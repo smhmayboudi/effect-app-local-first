@@ -12,12 +12,78 @@ import {
   WebSocketSyncLive
 } from "./Sync.js"
 
+// Authorization and Access Control Types
+export type Permission =
+  | "read"
+  | "write"
+  | "delete"
+  | "admin"
+
+export interface Subject {
+  readonly id: string
+  readonly type: "user" | "service" | "system"
+  readonly roles: Array<string>
+  readonly permissions: Array<Permission>
+}
+
+export interface Resource {
+  readonly id: string
+  readonly type: string
+  readonly owner?: string
+  readonly acl?: {
+    readonly read?: Array<string> // User IDs or role IDs
+    readonly write?: Array<string> // User IDs or role IDs
+    readonly delete?: Array<string> // User IDs or role IDs
+  }
+}
+
+export interface AuthorizationPolicy {
+  readonly id: string
+  readonly resourceType: string
+  readonly conditions: Array<(subject: Subject, resource: Resource, action: Permission) => boolean>
+  readonly effect: "allow" | "deny"
+  readonly priority: number
+}
+
+export interface AuthorizationService {
+  readonly checkPermission: (
+    subject: Subject,
+    resource: Resource,
+    action: Permission
+  ) => Effect.Effect<boolean, never, never>
+  readonly addPolicy: (policy: AuthorizationPolicy) => Effect.Effect<void, never, never>
+  readonly removePolicy: (policyId: string) => Effect.Effect<void, never, never>
+}
+
+export const AuthorizationService = Context.GenericTag<AuthorizationService>("AuthorizationService")
+
+// Business logic hooks for read/write operations
+export interface BusinessLogicHook {
+  readonly beforeRead?: (key: string, currentValue: unknown) => Effect.Effect<unknown, LocalFirstError, never>
+  readonly afterRead?: (key: string, value: unknown) => Effect.Effect<unknown, LocalFirstError, never>
+  readonly beforeWrite?: (
+    key: string,
+    newValue: unknown,
+    currentValue?: unknown
+  ) => Effect.Effect<unknown, LocalFirstError, never>
+  readonly afterWrite?: (key: string, newValue: unknown) => Effect.Effect<void, LocalFirstError, never>
+  readonly validation?: (key: string, value: unknown) => Effect.Effect<boolean, LocalFirstError, never>
+}
+
 export interface LocalFirstConfig {
   readonly storage: "indexeddb" | "memory"
   readonly sync: "websocket" | "manual"
   readonly syncUrl?: string
   readonly replicaId: string
   readonly autoSyncInterval?: number
+  readonly authorization?: {
+    readonly enabled: boolean
+    readonly defaultSubject?: Subject
+  }
+  readonly businessLogic?: {
+    readonly globalHook?: BusinessLogicHook
+    readonly collectionHooks?: Record<string, BusinessLogicHook>
+  }
 }
 
 export class LocalFirst extends Context.Tag("@core/LocalFirst")<
@@ -28,8 +94,66 @@ export class LocalFirst extends Context.Tag("@core/LocalFirst")<
     readonly sync: SyncService
     readonly hubService: HubService
     readonly vectorClock: Ref.Ref<VectorClock>
+    readonly authorizationService?: AuthorizationService
   }
 >() {}
+
+// AuthorizationService implementation
+export const AuthorizationServiceLive = Layer.succeed(
+  AuthorizationService,
+  {
+    checkPermission: (subject: Subject, resource: Resource, action: Permission) => {
+      // Check ACL (Access Control List) first
+      if (resource.acl) {
+        // Use type assertion to handle the permission as a valid ACL key
+        const aclRead = resource.acl.read
+        const aclWrite = resource.acl.write
+        const aclDelete = resource.acl.delete
+
+        if (
+          action === "read" && aclRead && (aclRead.includes(subject.id) ||
+            subject.roles.some((role) => aclRead.includes(role)))
+        ) {
+          return Effect.succeed(true)
+        }
+
+        if (
+          action === "write" && aclWrite && (aclWrite.includes(subject.id) ||
+            subject.roles.some((role) => aclWrite.includes(role)))
+        ) {
+          return Effect.succeed(true)
+        }
+
+        if (
+          action === "delete" && aclDelete && (aclDelete.includes(subject.id) ||
+            subject.roles.some((role) => aclDelete.includes(role)))
+        ) {
+          return Effect.succeed(true)
+        }
+      }
+
+      // Check if subject is the owner (for non-admin actions)
+      if (resource.owner && resource.owner === subject.id && action !== "admin") {
+        return Effect.succeed(true)
+      }
+
+      // Check if subject has admin permission
+      if (subject.permissions.includes("admin")) {
+        return Effect.succeed(true)
+      }
+
+      // Check user's direct permissions
+      if (subject.permissions.includes(action)) {
+        return Effect.succeed(true)
+      }
+
+      // Default: deny access
+      return Effect.succeed(false)
+    },
+    addPolicy: (policy: AuthorizationPolicy) => Effect.void,
+    removePolicy: (policyId: string) => Effect.void
+  }
+)
 
 export const LocalFirstLive = (config: LocalFirstConfig) =>
   Layer.effect(
@@ -39,6 +163,11 @@ export const LocalFirstLive = (config: LocalFirstConfig) =>
       const sync = yield* SyncService
       const hubService = yield* HubService
       const vectorClock = yield* Ref.make(VectorClock.empty())
+      let authorizationService: AuthorizationService | undefined = undefined
+      // Initialize authorization service if enabled
+      if (config.authorization?.enabled) {
+        authorizationService = yield* AuthorizationService
+      }
       // Auto-sync background process
       if (config.autoSyncInterval && config.sync !== "manual") {
         yield* Effect.fork(
@@ -60,13 +189,26 @@ export const LocalFirstLive = (config: LocalFirstConfig) =>
           )
         )
       }
-      return {
+      const result: {
+        config: LocalFirstConfig
+        storage: StorageService
+        sync: SyncService
+        hubService: HubService
+        vectorClock: Ref.Ref<VectorClock>
+        authorizationService?: AuthorizationService
+      } = {
         config,
         storage: storage as StorageService,
         sync: sync as SyncService,
         hubService: hubService as HubService,
         vectorClock
       }
+
+      if (authorizationService) {
+        result.authorizationService = authorizationService
+      }
+
+      return result
     })
   ).pipe(
     Layer.provide(
@@ -77,10 +219,11 @@ export const LocalFirstLive = (config: LocalFirstConfig) =>
         ? WebSocketSyncLive(config.syncUrl)
         : ManualSyncLive
     ),
-    Layer.provide(HubServiceLive)
+    Layer.provide(HubServiceLive),
+    Layer.provide(AuthorizationServiceLive)
   )
 
-// Collection API
+// Collection API with authorization
 export class Collection<A> {
   constructor(
     private readonly name: string
