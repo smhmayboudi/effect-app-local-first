@@ -3,7 +3,14 @@ import { GSet, LWWRegister, OrderedSet, ORMap, PNCounter, RGA, TwoPhaseSet, Vect
 import { CRDTError, type LocalFirstError, StorageError } from "./Errors.js"
 import { type Hub, HubService, HubServiceLive, type HubStrategy } from "./Hub.js"
 import { IndexedDBLive, MemoryStorageLive, type StorageBackend, StorageService } from "./Storage.js"
-import { ManualSyncLive, type SyncOperation, SyncService, WebSocketSyncLive } from "./Sync.js"
+import {
+  ManualSyncLive,
+  type ReconciliationRequest,
+  type ReconciliationResponse,
+  type SyncOperation,
+  SyncService,
+  WebSocketSyncLive
+} from "./Sync.js"
 
 export interface LocalFirstConfig {
   readonly storage: "indexeddb" | "memory"
@@ -41,6 +48,15 @@ export const LocalFirstLive = (config: LocalFirstConfig) =>
               yield* applyOperations(operations, storage, vectorClock, config.replicaId)
             }),
             Schedule.spaced(config.autoSyncInterval)
+          )
+        )
+
+        // Server reconciliation background process - run less frequently than regular sync
+        const reconciliationInterval = config.autoSyncInterval * 5 // 5x the regular sync interval
+        yield* Effect.fork(
+          Effect.repeat(
+            performReconciliation(storage, vectorClock, config.replicaId),
+            Schedule.spaced(reconciliationInterval)
           )
         )
       }
@@ -421,7 +437,7 @@ export class RGACollection<A> extends Collection<RGA<A>> {
   }
 }
 
-// Helper function to apply sync operations
+// Helper function to apply sync operations with server reconciliation awareness
 const applyOperations = (
   operations: Array<SyncOperation>,
   storage: StorageService,
@@ -450,7 +466,77 @@ const applyOperations = (
             Effect.fail(new StorageError({ message: "Failed to delete operation", cause: error }))
           )
         )
+      } else if (operation.type === "reconcile") {
+        // Handle reconciliation operations - apply server state updates
+        if (operation.serverClock) {
+          yield* Ref.set(vectorClock, operation.serverClock)
+        }
       }
       yield* Ref.set(vectorClock, operation.vectorClock)
+    }
+  })
+
+// Server reconciliation function - handles conflicts between client and server state
+const performReconciliation = (
+  storage: StorageService,
+  vectorClock: Ref.Ref<VectorClock>,
+  replicaId: string
+): Effect.Effect<void, LocalFirstError, StorageService | SyncService> =>
+  Effect.gen(function*() {
+    const sync = yield* SyncService
+    const operations = yield* sync.pull()
+    const currentClock = yield* Ref.get(vectorClock)
+
+    // Prepare reconciliation request
+    const reconciliationRequest: ReconciliationRequest = {
+      id: Math.random().toString(36).slice(2, 11),
+      operations, // Operations that the client has locally that may need reconciliation
+      clientState: currentClock,
+      replicaId,
+      timestamp: Date.now()
+    }
+
+    // Perform reconciliation with server
+    const response = yield* sync.reconcile(reconciliationRequest).pipe(
+      Effect.catchTag("SyncError", (error) =>
+        Effect.succeed<ReconciliationResponse>({
+          id: reconciliationRequest.id,
+          status: "accepted",
+          resolvedState: currentClock
+        }))
+    )
+
+    // Apply any server operations that came back from reconciliation
+    if (response.serverOperations) {
+      yield* applyOperations(response.serverOperations, storage, vectorClock, replicaId)
+    }
+
+    // Update local vector clock to resolved state if provided
+    if (response.resolvedState) {
+      yield* Ref.set(vectorClock, response.resolvedState)
+    }
+
+    // Handle any conflicts reported by server
+    if (response.conflicts) {
+      for (const conflict of response.conflicts) {
+        if (conflict.resolution === "server") {
+          // Apply server value
+          yield* (storage as StorageBackend).set(conflict.key, conflict.serverValue).pipe(
+            Effect.catchAll((error) =>
+              Effect.fail(new StorageError({ message: `Failed to resolve conflict for ${conflict.key}`, cause: error }))
+            )
+          )
+        } else if (conflict.resolution === "merge") {
+          // Attempt to merge values (this would require custom logic per CRDT type)
+          // For now, we'll default to server value, but in a real system this would depend on the CRDT type
+          yield* (storage as StorageBackend).set(conflict.key, conflict.serverValue).pipe(
+            Effect.catchAll((error) =>
+              Effect.fail(
+                new StorageError({ message: `Failed to resolve merge conflict for ${conflict.key}`, cause: error })
+              )
+            )
+          )
+        }
+      }
     }
   })

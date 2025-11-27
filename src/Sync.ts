@@ -9,19 +9,47 @@ class DataConflict extends Schema.TaggedClass<DataConflict>("@sync/DataConflict"
   timestamp: Schema.Number
 }) {}
 
+// Extended SyncOperation to support reconciliation
 export interface SyncOperation {
   readonly id: string
-  readonly type: "set" | "delete"
+  readonly type: "set" | "delete" | "reconcile"
   readonly key: string
   readonly value?: unknown
   readonly timestamp: number
   readonly replicaId: string
   readonly vectorClock: VectorClock
+  // For reconciliation operations
+  readonly serverClock?: VectorClock
+  readonly operationVector?: VectorClock // The vector clock of the operation being reconciled
+}
+
+// Server reconciliation request structure
+export interface ReconciliationRequest {
+  readonly id: string
+  readonly operations: Array<SyncOperation>
+  readonly clientState: VectorClock // Client's current vector clock state
+  readonly replicaId: string
+  readonly timestamp: number
+}
+
+// Server reconciliation response structure
+export interface ReconciliationResponse {
+  readonly id: string
+  readonly status: "accepted" | "conflict" | "rejected"
+  readonly serverOperations?: Array<SyncOperation> // Operations to apply from server
+  readonly resolvedState?: VectorClock // New resolved vector clock state
+  readonly conflicts?: Array<{
+    key: string
+    clientValue: unknown
+    serverValue: unknown
+    resolution: "client" | "server" | "merge"
+  }>
 }
 
 export interface SyncEngine {
   readonly push: (operations: Array<SyncOperation>) => Effect.Effect<void, SyncError>
   readonly pull: () => Effect.Effect<Array<SyncOperation>, SyncError>
+  readonly reconcile: (request: ReconciliationRequest) => Effect.Effect<ReconciliationResponse, SyncError>
   readonly conflicts: Stream.Stream<DataConflict, SyncError>
   readonly status: Stream.Stream<"online" | "offline" | "syncing", never>
   readonly connect: () => Effect.Effect<void, SyncError>
@@ -219,12 +247,67 @@ export const WebSocketSyncLive = (url: string) =>
           })
         })
 
+      const reconcile = (request: ReconciliationRequest): Effect.Effect<ReconciliationResponse, SyncError> =>
+        Effect.gen(function*() {
+          if (!ws || ws.readyState !== WebSocket.OPEN) {
+            return yield* Effect.fail(
+              new SyncError({
+                message: "WebSocket not connected",
+                code: "NOT_CONNECTED",
+                cause: null
+              })
+            )
+          }
+
+          yield* Queue.offer(statusQueue, "syncing")
+
+          return yield* Effect.async<ReconciliationResponse, SyncError>((resume) => {
+            try {
+              ws!.send(JSON.stringify({
+                type: "reconcile",
+                ...request
+              }))
+
+              const timeout = setTimeout(() => {
+                resume(Effect.fail(
+                  new SyncError({
+                    message: "Reconciliation operation timeout",
+                    code: "TIMEOUT",
+                    cause: null
+                  })
+                ))
+              }, 15000) // Longer timeout for reconciliation
+
+              const messageHandler = (event: MessageEvent) => {
+                const data = JSON.parse(event.data)
+                if (data.type === "reconcile-response" && data.id === request.id) {
+                  clearTimeout(timeout)
+                  ws!.removeEventListener("message", messageHandler)
+                  Queue.offer(statusQueue, "online").pipe(Effect.runPromise)
+                  resume(Effect.succeed(data.response))
+                }
+              }
+
+              ws!.addEventListener("message", messageHandler)
+            } catch (error) {
+              resume(Effect.fail(
+                new SyncError({
+                  message: "Failed to send reconciliation request",
+                  code: "RECONCILE_ERROR",
+                  cause: error
+                })
+              ))
+            }
+          })
+        })
+
       // Start connection
       yield* connect()
 
       return {
         push,
         pull,
+        reconcile,
         conflicts: Stream.fromQueue(conflictQueue),
         status: Stream.fromQueue(statusQueue),
         connect,
@@ -239,6 +322,12 @@ export const ManualSyncLive = Layer.succeed(
   {
     push: () => Effect.void,
     pull: () => Effect.succeed([]),
+    reconcile: (request: ReconciliationRequest) =>
+      Effect.succeed<ReconciliationResponse>({
+        id: request.id,
+        status: "accepted",
+        resolvedState: request.clientState
+      }),
     conflicts: Stream.empty,
     status: Stream.succeed("offline" as const),
     connect: () => Effect.void,
