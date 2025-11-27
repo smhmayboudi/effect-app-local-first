@@ -12,6 +12,10 @@ maintaining synchronization capabilities.
     - LWWRegister: Last-Writer-Wins register for storing single values with timestamp-based conflict resolution
     - GSet: Grow-only Set (a CRDT that only allows adding elements, never removing)
     - ORMap: Observed-Remove Map (a map that can add and remove entries with proper conflict resolution)
+    - TwoPhaseSet: Fully commutative Set with tombstones that allows both add and remove operations
+    - OrderedSet: Ordered Set with tombstones allowing both add and remove operations while maintaining logical order
+    - RGA (Replicated Growable Array): Array-like CRDT supporting append, insert, and remove operations
+    - PNCounter: Positive-negative counter that supports both increments and decrements
 
   2. Hub Messaging System (src/Hub.ts):
 
@@ -24,12 +28,18 @@ maintaining synchronization capabilities.
     - Abstract storage backend interface with implementations for IndexedDB and in-memory storage
     - Provides get, set, delete, clear, keys, and watch operations
     - Supports real-time watching of key changes
+    - Data model abstraction for custom serialization
+    - Support for non-standard backend databases with configurable serialization
+    - Raw data operations for low-level access
 
   4. Synchronization Engine (src/Sync.ts):
 
     - WebSocket-based real-time synchronization between replicas
     - Manual sync option for offline-only scenarios
     - Conflict detection and status tracking (online/offline/syncing)
+    - Server reconciliation for authoritative state management
+    - Partial sync support for selective data synchronization
+    - Query-based synchronization with customizable filters
 
   5. Framework Abstraction (src/Framework.ts):
 
@@ -37,6 +47,41 @@ maintaining synchronization capabilities.
     - Collection classes that provide type-safe access to different CRDT types
     - Automatic synchronization and vector clock management
     - Configurable storage and sync backends
+    - Fine-grained authorization system with role-based access control
+    - Business logic hooks for custom validation and transformation
+    - Collection-specific CRDT collections for new CRDT types
+
+## Advanced Features
+
+**Server Reconciliation System**
+- Authoritative server state management with conflict detection
+- Reconciliation protocol for resolving discrepancies between client and server states
+- Vector clock synchronization for maintaining causality
+- Conflict resolution strategies (client, server, merge)
+
+**Fine-Grained Authorization**
+- Complete AuthorizationService with Subject and Resource types
+- Permission model supporting "read", "write", "delete", "admin" and custom permissions
+- ACL-based access control with role support
+- Integration with Collection operations for secure access
+
+**Partial Sync Support**
+- PartialSyncConfig interface for selective synchronization
+- Collection and tag-based filtering capabilities
+- Timestamp-based sync constraints
+- Reduced bandwidth usage through targeted synchronization
+
+**Non-Standard Backend Support**
+- DataModel abstraction for custom serialization
+- JSON and Binary data models out-of-the-box
+- Database configuration support for various backends (IndexedDB, SQLite, Redis, PostgreSQL)
+- Custom serialization for domain-specific data structures
+
+**Business Logic Hooks**
+- BusinessLogicHook interface with before/after read/write operations
+- Validation hooks for data integrity
+- Per-collection and global hook support
+- Fallback mechanisms for hook failures
 
 ## Architecture
 
@@ -47,13 +92,14 @@ are:
   - StorageService: Handles data persistence across different backends
   - SyncService: Manages real-time synchronization between replicas
   - HubService: Provides messaging capabilities
+  - AuthorizationService: Manages access control and permissions
 
 ## Examples
 
-The framework includes two example applications:
+The framework includes example applications:
 
   1. HubApp: Demonstrates the hub messaging system with event publishing and subscription
-  2. TodoApp: A complete todo application using ORMap for todos, LWWRegister for user profile, and GSet for user tags
+  2. TodoApp: A complete todo application using ORMap for todos, LWWRegister for user profile, GSet for user tags, and new CRDTs like PNCounter and RGA
 
 ## Design Philosophy
 
@@ -64,9 +110,22 @@ The framework emphasizes:
   - Conflict-free replicated data types for automatic conflict resolution
   - Modular architecture with pluggable components
   - Real-time synchronization with WebSocket support
+  - Enterprise-grade security with fine-grained authorization
+  - Flexible storage backends with custom data models
+  - Scalable architecture with partial sync capabilities
 
 This framework is designed for building distributed applications that need to work seamlessly in both online and offline scenarios while
 maintaining data consistency across multiple replicas.
+
+## Migration Guide for Advanced Features
+
+To leverage the new features:
+
+1. **Authorization**: Enable in LocalFirstConfig with authorization: { enabled: true, defaultSubject: {...} }
+2. **Partial Sync**: Configure sync operations with PartialSyncConfig parameters
+3. **Business Logic**: Define BusinessLogicHook objects and attach to LocalFirstConfig
+4. **Custom Serialization**: Implement DataModel interface for your data formats
+5. **New CRDTs**: Import new collection types: TwoPhaseSetCollection, OrderedSetCollection, RGACollection, PNCounterCollection
 
 ## Running Code
 
