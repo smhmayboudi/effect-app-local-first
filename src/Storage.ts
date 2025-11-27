@@ -1,5 +1,5 @@
 import { Chunk, Context, Effect, Layer, Option as EffectOption, Stream } from "effect"
-import { StorageError } from "./Errors.ts"
+import { StorageError } from "./Errors.js"
 
 export interface StorageBackend {
   readonly get: (key: string) => Effect.Effect<unknown, StorageError>

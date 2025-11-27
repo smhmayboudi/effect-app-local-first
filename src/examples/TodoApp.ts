@@ -1,7 +1,7 @@
 import { Console, Effect, Layer, Stream } from "effect"
-import { GSetCollection, LocalFirstLive, LWWRegisterCollection, ORMapCollection } from "../Framework.ts"
-import { MemoryStorageLive } from "../Storage.ts"
-import { ManualSyncLive } from "../Sync.ts"
+import { GSetCollection, LocalFirstLive, LWWRegisterCollection, ORMapCollection } from "../Framework.js"
+import { MemoryStorageLive } from "../Storage.js"
+import { ManualSyncLive } from "../Sync.js"
 
 // Application configuration
 const config = {

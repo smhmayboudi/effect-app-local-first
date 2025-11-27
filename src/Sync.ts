@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Queue, Schema, Stream } from "effect"
-import type { VectorClock } from "./Core.ts"
-import { SyncError } from "./Errors.ts"
+import type { VectorClock } from "./Core.js"
+import { SyncError } from "./Errors.js"
 
 class DataConflict extends Schema.TaggedClass<DataConflict>("@sync/DataConflict")("DataConflict", {
   key: Schema.String,

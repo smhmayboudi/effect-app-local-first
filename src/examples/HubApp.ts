@@ -1,6 +1,6 @@
 import { Effect, Layer, Stream } from "effect"
-import { Collection, LocalFirstLive } from "../Framework.ts"
-import { HubServiceLive } from "../Hub.ts"
+import { Collection, LocalFirstLive } from "../Framework.js"
+import { HubServiceLive } from "../Hub.js"
 
 interface UserEvent {
   readonly type: "userCreated" | "userUpdated" | "userDeleted"

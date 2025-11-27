@@ -1,9 +1,9 @@
 import { Context, Effect, Layer, type Option, Ref, Schedule, Stream } from "effect"
-import { GSet, LWWRegister, ORMap, VectorClock } from "./Core.ts"
-import { CRDTError, type LocalFirstError, StorageError } from "./Errors.ts"
-import { type Hub, HubService, HubServiceLive, type HubStrategy } from "./Hub.ts"
-import { IndexedDBLive, MemoryStorageLive, type StorageBackend, StorageService } from "./Storage.ts"
-import { ManualSyncLive, type SyncOperation, SyncService, WebSocketSyncLive } from "./Sync.ts"
+import { GSet, LWWRegister, ORMap, VectorClock } from "./Core.js"
+import { CRDTError, type LocalFirstError, StorageError } from "./Errors.js"
+import { type Hub, HubService, HubServiceLive, type HubStrategy } from "./Hub.js"
+import { IndexedDBLive, MemoryStorageLive, type StorageBackend, StorageService } from "./Storage.js"
+import { ManualSyncLive, type SyncOperation, SyncService, WebSocketSyncLive } from "./Sync.js"
 
 export interface LocalFirstConfig {
   readonly storage: "indexeddb" | "memory"
