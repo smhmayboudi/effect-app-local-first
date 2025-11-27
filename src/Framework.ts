@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, type Option, Ref, Schedule, Stream } from "effect"
-import { GSet, LWWRegister, ORMap, VectorClock } from "./Core.js"
+import { GSet, LWWRegister, OrderedSet, ORMap, PNCounter, RGA, TwoPhaseSet, VectorClock } from "./Core.js"
 import { CRDTError, type LocalFirstError, StorageError } from "./Errors.js"
 import { type Hub, HubService, HubServiceLive, type HubStrategy } from "./Hub.js"
 import { IndexedDBLive, MemoryStorageLive, type StorageBackend, StorageService } from "./Storage.js"
@@ -236,6 +236,188 @@ export class ORMapCollection<A> extends Collection<ORMap<A>> {
 
   entries(): Effect.Effect<Readonly<Record<string, A>>, LocalFirstError, StorageService> {
     return this.get().pipe(Effect.map((map) => map.toRecord()))
+  }
+}
+
+// TwoPhaseSet with tombstones Collection
+export class TwoPhaseSetCollection<A> extends Collection<TwoPhaseSet<A>> {
+  constructor(name: string) {
+    super(name)
+  }
+
+  add(element: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(TwoPhaseSet.empty<A>()))
+      )
+      const updated = current.add(element)
+      yield* self.set(updated)
+    })
+  }
+
+  remove(element: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(TwoPhaseSet.empty<A>()))
+      )
+      const updated = current.remove(element)
+      yield* self.set(updated)
+    })
+  }
+
+  values(): Effect.Effect<ReadonlyArray<A>, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((set) => set.values()))
+  }
+
+  has(element: A): Effect.Effect<boolean, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((set) => set.has(element)))
+  }
+}
+
+// OrderedSet with tombstones Collection
+export class OrderedSetCollection<A> extends Collection<OrderedSet<A>> {
+  constructor(name: string) {
+    super(name)
+  }
+
+  add(
+    id: string,
+    value: A
+  ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const localFirst = yield* LocalFirst
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(OrderedSet.empty<A>()))
+      )
+      const updated = current.add(id, value, Date.now(), localFirst.config.replicaId)
+      yield* self.set(updated)
+    })
+  }
+
+  remove(
+    id: string
+  ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const current = yield* self.get()
+      const updated = current.remove(id)
+      yield* self.set(updated)
+    })
+  }
+
+  getForKey(id: string): Effect.Effect<A | undefined, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((set) => set.get(id)))
+  }
+
+  values(): Effect.Effect<Array<{ id: string; value: A }>, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((set) => set.values()))
+  }
+
+  has(id: string): Effect.Effect<boolean, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((set) => set.has(id)))
+  }
+}
+
+// PNCounter Collection
+export class PNCounterCollection extends Collection<PNCounter> {
+  constructor(name: string) {
+    super(name)
+  }
+
+  increment(
+    by: number = 1
+  ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const localFirst = yield* LocalFirst
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(PNCounter.empty()))
+      )
+      const updated = current.increment(localFirst.config.replicaId, by)
+      yield* self.set(updated)
+    })
+  }
+
+  decrement(
+    by: number = 1
+  ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const localFirst = yield* LocalFirst
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(PNCounter.empty()))
+      )
+      const updated = current.decrement(localFirst.config.replicaId, by)
+      yield* self.set(updated)
+    })
+  }
+
+  value(): Effect.Effect<number, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((counter) => counter.value()))
+  }
+}
+
+// RGA (Replicated Growable Array) Collection
+export class RGACollection<A> extends Collection<RGA<A>> {
+  constructor(name: string) {
+    super(name)
+  }
+
+  append(
+    value: A
+  ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const localFirst = yield* LocalFirst
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(RGA.empty<A>()))
+      )
+      const updated = current.append(value, localFirst.config.replicaId)
+      yield* self.set(updated)
+    })
+  }
+
+  insertAt(
+    index: number,
+    value: A
+  ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const localFirst = yield* LocalFirst
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(RGA.empty<A>()))
+      )
+      const updated = current.insertAt(index, value, localFirst.config.replicaId)
+      yield* self.set(updated)
+    })
+  }
+
+  removeAt(
+    index: number
+  ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
+    const self = this
+    return Effect.gen(function*() {
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(RGA.empty<A>()))
+      )
+      const updated = current.removeAt(index)
+      yield* self.set(updated)
+    })
+  }
+
+  at(index: number): Effect.Effect<A | undefined, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((array) => array.get(index)))
+  }
+
+  length(): Effect.Effect<number, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((array) => array.length))
+  }
+
+  toArray(): Effect.Effect<Array<A>, LocalFirstError, StorageService> {
+    return this.get().pipe(Effect.map((array) => array.toArray()))
   }
 }
 
