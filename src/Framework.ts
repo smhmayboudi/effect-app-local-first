@@ -224,6 +224,49 @@ export const LocalFirstLive = (config: LocalFirstConfig) =>
   )
 
 // Collection API with authorization
+// Utility functions for common Collection operations
+const getOrCreateEmpty = <T>(
+  getter: Effect.Effect<T, LocalFirstError, StorageService>,
+  emptyFactory: () => T
+): Effect.Effect<T, LocalFirstError, StorageService> => {
+  return getter.pipe(
+    Effect.catchAll(() => Effect.succeed(emptyFactory()))
+  )
+}
+
+const setWithSync = <T>(
+  collection: Collection<T>,
+  value: T
+): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> => {
+  return Effect.gen(function*() {
+    const storage = yield* StorageService
+    const sync = yield* SyncService
+    const localFirst = yield* LocalFirst
+    const vectorClock = localFirst.vectorClock
+
+    // Update local storage
+    yield* storage.set(collection["name"], value)
+
+    // Create sync operation
+    const clock = yield* Ref.get(vectorClock)
+    const newClock = clock.increment(localFirst.config.replicaId)
+    yield* Ref.set(vectorClock, newClock)
+    const operation = {
+      id: Math.random().toString(36).slice(2, 11),
+      type: "set" as const,
+      key: collection["name"],
+      value,
+      timestamp: Date.now(),
+      replicaId: localFirst.config.replicaId,
+      vectorClock: newClock
+    }
+    // Push to sync engine
+    yield* sync.push([operation]).pipe(
+      Effect.catchAll(() => Effect.void) // Fail silently for offline
+    )
+  })
+}
+
 export class Collection<A> {
   constructor(
     private readonly name: string
@@ -259,32 +302,7 @@ export class Collection<A> {
   }
 
   set(value: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
-    const self = this
-    return Effect.gen(function*() {
-      const storage = yield* StorageService
-      const sync = yield* SyncService
-      const localFirst = yield* LocalFirst
-      const vectorClock = localFirst.vectorClock
-      // Update local storage
-      yield* storage.set(self.name, value)
-      // Create sync operation
-      const clock = yield* Ref.get(vectorClock)
-      const newClock = clock.increment(localFirst.config.replicaId)
-      yield* Ref.set(vectorClock, newClock)
-      const operation = {
-        id: Math.random().toString(36).slice(2, 11),
-        type: "set" as const,
-        key: self.name,
-        value,
-        timestamp: Date.now(),
-        replicaId: localFirst.config.replicaId,
-        vectorClock: newClock
-      }
-      // Push to sync engine
-      yield* sync.push([operation]).pipe(
-        Effect.catchAll(() => Effect.void) // Fail silently for offline
-      )
-    })
+    return setWithSync(this, value)
   }
 
   watch(): Stream.Stream<A, LocalFirstError, StorageService> {
@@ -316,17 +334,12 @@ export class LWWRegisterCollection<A> extends Collection<LWWRegister<A>> {
   setValue(value: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() =>
-          Effect.gen(function*() {
-            const localFirst = yield* LocalFirst
-            return LWWRegister.make(value, localFirst.config.replicaId)
-          })
-        )
-      )
       const localFirst = yield* LocalFirst
+      const current = yield* self.get().pipe(
+        Effect.catchAll(() => Effect.succeed(LWWRegister.make(value, localFirst.config.replicaId)))
+      )
       const updated = current.set(value, localFirst.config.replicaId)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -343,11 +356,12 @@ export class GSetCollection<A> extends Collection<GSet<A>> {
   add(element: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(GSet.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => GSet.empty<A>()
       )
       const updated = current.add(element)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -368,20 +382,24 @@ export class ORMapCollection<A> extends Collection<ORMap<A>> {
   put(key: string, value: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(ORMap.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => ORMap.empty<A>()
       )
       const updated = current.put(key, value)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
   remove(key: string): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get()
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => ORMap.empty<A>()
+      )
       const updated = current.remove(key)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -407,22 +425,24 @@ export class TwoPhaseSetCollection<A> extends Collection<TwoPhaseSet<A>> {
   add(element: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(TwoPhaseSet.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => TwoPhaseSet.empty<A>()
       )
       const updated = current.add(element)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
   remove(element: A): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(TwoPhaseSet.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => TwoPhaseSet.empty<A>()
       )
       const updated = current.remove(element)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -448,11 +468,12 @@ export class OrderedSetCollection<A> extends Collection<OrderedSet<A>> {
     const self = this
     return Effect.gen(function*() {
       const localFirst = yield* LocalFirst
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(OrderedSet.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => OrderedSet.empty<A>()
       )
       const updated = current.add(id, value, Date.now(), localFirst.config.replicaId)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -461,9 +482,12 @@ export class OrderedSetCollection<A> extends Collection<OrderedSet<A>> {
   ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get()
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => OrderedSet.empty<A>()
+      )
       const updated = current.remove(id)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -492,11 +516,12 @@ export class PNCounterCollection extends Collection<PNCounter> {
     const self = this
     return Effect.gen(function*() {
       const localFirst = yield* LocalFirst
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(PNCounter.empty()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => PNCounter.empty()
       )
       const updated = current.increment(localFirst.config.replicaId, by)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -506,11 +531,12 @@ export class PNCounterCollection extends Collection<PNCounter> {
     const self = this
     return Effect.gen(function*() {
       const localFirst = yield* LocalFirst
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(PNCounter.empty()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => PNCounter.empty()
       )
       const updated = current.decrement(localFirst.config.replicaId, by)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -531,11 +557,12 @@ export class RGACollection<A> extends Collection<RGA<A>> {
     const self = this
     return Effect.gen(function*() {
       const localFirst = yield* LocalFirst
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(RGA.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => RGA.empty<A>()
       )
       const updated = current.append(value, localFirst.config.replicaId)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -546,11 +573,12 @@ export class RGACollection<A> extends Collection<RGA<A>> {
     const self = this
     return Effect.gen(function*() {
       const localFirst = yield* LocalFirst
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(RGA.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => RGA.empty<A>()
       )
       const updated = current.insertAt(index, value, localFirst.config.replicaId)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
@@ -559,11 +587,12 @@ export class RGACollection<A> extends Collection<RGA<A>> {
   ): Effect.Effect<void, LocalFirstError, StorageService | SyncService | LocalFirst> {
     const self = this
     return Effect.gen(function*() {
-      const current = yield* self.get().pipe(
-        Effect.catchAll(() => Effect.succeed(RGA.empty<A>()))
+      const current = yield* getOrCreateEmpty(
+        self.get(),
+        () => RGA.empty<A>()
       )
       const updated = current.removeAt(index)
-      yield* self.set(updated)
+      yield* setWithSync(self, updated)
     })
   }
 
