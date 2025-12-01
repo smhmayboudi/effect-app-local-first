@@ -1,61 +1,176 @@
 import { Chunk, Context, Effect, Layer, Option as EffectOption, Stream } from "effect"
 import { StorageError } from "./Errors.js"
 
-// Data model interface for different storage systems
+/**
+ * Data model interface for different storage systems.
+ * Defines how data is serialized to and deserialized from bytes.
+ */
 export interface DataModel {
+  /**
+   * Serializes a value to a Uint8Array.
+   * @param value - The value to serialize
+   * @returns The serialized data as a Uint8Array
+   */
   serialize(value: unknown): Uint8Array
+  /**
+   * Deserializes data from a Uint8Array to a typed value.
+   * @template T - The type to deserialize to
+   * @param data - The serialized data as a Uint8Array
+   * @returns The deserialized value
+   */
   deserialize<T>(data: Uint8Array): T
 }
 
-// Default JSON data model
+/**
+ * Default JSON data model that serializes/deserializes using JSON.
+ */
 export const JsonDataModel: DataModel = {
+  /**
+   * Serializes a value to JSON and then to a Uint8Array.
+   * @param value - The value to serialize
+   * @returns The serialized data as a Uint8Array
+   */
   serialize: (value: unknown) => {
     return new TextEncoder().encode(JSON.stringify(value))
   },
+  /**
+   * Deserializes a Uint8Array containing JSON data to a typed value.
+   * @template T - The type to deserialize to
+   * @param data - The serialized JSON data as a Uint8Array
+   * @returns The deserialized value
+   */
   deserialize: <T>(data: Uint8Array) => {
     return JSON.parse(new TextDecoder().decode(data)) as T
   }
 }
 
-// Query interface for different database types
+/**
+ * Query interface for different database types.
+ * Provides a way to express different types of queries against storage.
+ */
 export interface StorageQuery {
+  /** The type of query to perform */
   readonly type: "range" | "filter" | "aggregate" | "custom"
+  /** Parameters for the query */
   readonly params: Record<string, unknown>
 }
 
-// Configuration for different database types
+/**
+ * Configuration for different database types.
+ * Defines how to connect to and configure different storage backends.
+ */
 export interface DatabaseConfig {
+  /** The type of database to use */
   readonly type: "indexeddb" | "sqlite" | "redis" | "postgres" | "custom"
+  /** Configuration options specific to the database type */
   readonly options: Record<string, unknown>
+  /** Optional data model to use for serialization/deserialization */
   readonly dataModel?: DataModel
 }
 
+/**
+ * Basic storage backend interface.
+ * Defines the core operations that any storage backend must implement.
+ */
 export interface StorageBackend {
+  /**
+   * Gets a value by key from storage.
+   * @param key - The key to retrieve
+   * @returns Effect that resolves to the value or a StorageError
+   */
   readonly get: (key: string) => Effect.Effect<unknown, StorageError>
+  /**
+   * Sets a value by key in storage.
+   * @param key - The key to set
+   * @param value - The value to store
+   * @returns Effect that completes when the value is set or a StorageError
+   */
   readonly set: (key: string, value: unknown) => Effect.Effect<void, StorageError>
+  /**
+   * Deletes a key-value pair from storage.
+   * @param key - The key to delete
+   * @returns Effect that completes when the key is deleted or a StorageError
+   */
   readonly delete: (key: string) => Effect.Effect<void, StorageError>
+  /**
+   * Clears all key-value pairs from storage.
+   * @returns Effect that completes when storage is cleared or a StorageError
+   */
   readonly clear: () => Effect.Effect<void, StorageError>
+  /**
+   * Gets all keys in storage.
+   * @returns Effect that resolves to a readonly array of keys or a StorageError
+   */
   readonly keys: () => Effect.Effect<ReadonlyArray<string>, StorageError>
+  /**
+   * Watches for changes to a specific key.
+   * @param key - The key to watch for changes
+   * @returns A Stream that emits updated values for the key
+   */
   readonly watch: (key: string) => Stream.Stream<unknown, StorageError>
 }
 
-// Enhanced storage backend that supports custom data models
+/**
+ * Enhanced storage backend that supports custom data models.
+ * Extends the basic StorageBackend with additional methods for working with raw bytes and custom models.
+ */
 export interface ExtendedStorageBackend extends StorageBackend {
+  /**
+   * Gets a value by key using a specific data model for deserialization.
+   * @template T - The type of the value to retrieve
+   * @param key - The key to retrieve
+   * @param model - The data model to use for deserialization
+   * @returns Effect that resolves to the deserialized value or a StorageError
+   */
   readonly getWithModel: <T>(key: string, model: DataModel) => Effect.Effect<T, StorageError>
+  /**
+   * Sets a value by key using a specific data model for serialization.
+   * @param key - The key to set
+   * @param value - The value to store
+   * @param model - The data model to use for serialization
+   * @returns Effect that completes when the value is set or a StorageError
+   */
   readonly setWithModel: (key: string, value: unknown, model: DataModel) => Effect.Effect<void, StorageError>
+  /**
+   * Gets the raw byte representation of a value by key.
+   * @param key - The key to retrieve
+   * @returns Effect that resolves to the raw bytes or a StorageError
+   */
   readonly getRaw: (key: string) => Effect.Effect<Uint8Array, StorageError>
+  /**
+   * Sets a raw byte representation for a key.
+   * @param key - The key to set
+   * @param data - The raw bytes to store
+   * @returns Effect that completes when the data is set or a StorageError
+   */
   readonly setRaw: (key: string, data: Uint8Array) => Effect.Effect<void, StorageError>
-  // Support for custom storage queries
+  /**
+   * Executes a storage query.
+   * @param query - The query to execute
+   * @returns Effect that resolves to an array of results or a StorageError
+   */
   readonly query: (query: StorageQuery) => Effect.Effect<Array<unknown>, StorageError>
 }
 
+/**
+ * Storage service interface that extends the enhanced storage backend.
+ */
 export interface StorageService extends ExtendedStorageBackend {}
+
+/**
+ * Context tag for the StorageService.
+ */
 export const StorageService = Context.GenericTag<StorageService>("StorageService")
 
-// Default data model for storage
+/**
+ * Default data model for storage, using JSON serialization.
+ */
 const defaultDataModel: DataModel = JsonDataModel
 
-// IndexedDB Implementation with extended features
+/**
+ * Layer providing IndexedDB implementation of the StorageService.
+ * This implementation persists data in the browser's IndexedDB.
+ */
 export const IndexedDBLive = Layer.scoped(
   StorageService,
   Effect.gen(function*() {
@@ -190,7 +305,10 @@ export const IndexedDBLive = Layer.scoped(
   })
 )
 
-// Memory Storage for testing with extended features
+/**
+ * Layer providing in-memory implementation of the StorageService.
+ * This implementation stores data in memory and is primarily for testing purposes.
+ */
 export const MemoryStorageLive = Layer.effect(
   StorageService,
   Effect.sync(() => {

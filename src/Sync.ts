@@ -2,6 +2,10 @@ import { Context, Effect, Layer, Queue, Schema, Stream } from "effect"
 import type { VectorClock } from "./Core.js"
 import { SyncError } from "./Errors.js"
 
+/**
+ * Represents a data conflict that occurs during synchronization.
+ * This class is used when local and remote values differ during sync operations.
+ */
 class DataConflict extends Schema.TaggedClass<DataConflict>("@sync/DataConflict")("DataConflict", {
   key: Schema.String,
   localValue: Schema.Unknown,
@@ -9,39 +13,68 @@ class DataConflict extends Schema.TaggedClass<DataConflict>("@sync/DataConflict"
   timestamp: Schema.Number
 }) {}
 
-// Extended SyncOperation to support reconciliation
+/**
+ * Extended SyncOperation to support reconciliation.
+ * Represents an operation to be synchronized between replicas.
+ */
 export interface SyncOperation {
+  /** Unique identifier for this operation */
   readonly id: string
+  /** Type of operation (set, delete, or reconcile) */
   readonly type: "set" | "delete" | "reconcile"
+  /** Key of the data being operated on */
   readonly key: string
+  /** Value to be stored (for set operations) */
   readonly value?: unknown
+  /** Timestamp of the operation */
   readonly timestamp: number
+  /** ID of the replica that originated this operation */
   readonly replicaId: string
+  /** Vector clock associated with this operation */
   readonly vectorClock: VectorClock
-  // For reconciliation operations
+  /** For reconciliation operations - the server's clock state */
   readonly serverClock?: VectorClock
-  readonly operationVector?: VectorClock // The vector clock of the operation being reconciled
-  // For partial sync
-  readonly collection?: string // Collection name for partial sync
-  readonly tags?: Array<string> // Tags for categorizing data
-  readonly scope?: string // Scope/type of data
+  /** For reconciliation operations - the vector clock of the operation being reconciled */
+  readonly operationVector?: VectorClock
+  /** For partial sync - the collection name */
+  readonly collection?: string
+  /** For partial sync - tags for categorizing data */
+  readonly tags?: Array<string>
+  /** For partial sync - the scope/type of data */
+  readonly scope?: string
 }
 
-// Server reconciliation request structure
+/**
+ * Server reconciliation request structure.
+ * Contains information needed to reconcile differences between client and server state.
+ */
 export interface ReconciliationRequest {
+  /** Unique identifier for this request */
   readonly id: string
+  /** Array of operations from the client that may need reconciliation */
   readonly operations: Array<SyncOperation>
-  readonly clientState: VectorClock // Client's current vector clock state
+  /** Client's current vector clock state */
+  readonly clientState: VectorClock
+  /** ID of the replica making the request */
   readonly replicaId: string
+  /** Timestamp of the request */
   readonly timestamp: number
 }
 
-// Server reconciliation response structure
+/**
+ * Server reconciliation response structure.
+ * Contains the result of a reconciliation request from the server.
+ */
 export interface ReconciliationResponse {
+  /** ID matching the original request */
   readonly id: string
+  /** Status of the reconciliation */
   readonly status: "accepted" | "conflict" | "rejected"
-  readonly serverOperations?: Array<SyncOperation> // Operations to apply from server
-  readonly resolvedState?: VectorClock // New resolved vector clock state
+  /** Operations to apply from the server */
+  readonly serverOperations?: Array<SyncOperation>
+  /** New resolved vector clock state after reconciliation */
+  readonly resolvedState?: VectorClock
+  /** Array of conflicts that need resolution */
   readonly conflicts?: Array<{
     key: string
     clientValue: unknown
@@ -50,30 +83,90 @@ export interface ReconciliationResponse {
   }>
 }
 
-// Partial sync configuration
+/**
+ * Partial sync configuration.
+ * Allows for selective synchronization of specific data subsets.
+ */
 export interface PartialSyncConfig {
-  readonly collections?: Array<string> // Specific collections to sync
-  readonly tags?: Array<string> // Tags to filter by
-  readonly scope?: string // Specific scope to sync
-  readonly since?: number // Sync operations since timestamp
-  readonly limit?: number // Maximum number of operations to sync
+  /** Specific collections to sync */
+  readonly collections?: Array<string>
+  /** Tags to filter by */
+  readonly tags?: Array<string>
+  /** Specific scope to sync */
+  readonly scope?: string
+  /** Sync operations since a specific timestamp */
+  readonly since?: number
+  /** Maximum number of operations to sync */
+  readonly limit?: number
 }
 
+/**
+ * SyncEngine interface defining the core synchronization operations.
+ * Provides methods for pushing, pulling, and reconciling data between replicas.
+ */
 export interface SyncEngine {
+  /**
+   * Pushes operations to other replicas or a central server.
+   * @param operations - Array of operations to push
+   * @returns Effect that completes when operations are pushed or a SyncError
+   */
   readonly push: (operations: Array<SyncOperation>) => Effect.Effect<void, SyncError>
+  /**
+   * Pulls operations from other replicas or a central server.
+   * @param config - Optional configuration for partial sync
+   * @returns Effect that resolves to an array of operations or a SyncError
+   */
   readonly pull: (config?: PartialSyncConfig) => Effect.Effect<Array<SyncOperation>, SyncError>
+  /**
+   * Initiates a reconciliation process with the server to resolve conflicts.
+   * @param request - The reconciliation request with client state
+   * @returns Effect that resolves to a reconciliation response or a SyncError
+   */
   readonly reconcile: (request: ReconciliationRequest) => Effect.Effect<ReconciliationResponse, SyncError>
+  /**
+   * Performs a partial sync based on configuration.
+   * @param config - Configuration for the partial sync
+   * @returns Effect that completes when partial sync is finished or a SyncError
+   */
   readonly partialSync: (config: PartialSyncConfig) => Effect.Effect<void, SyncError>
+  /**
+   * Stream of data conflicts that occur during synchronization.
+   * @returns A Stream of DataConflict instances
+   */
   readonly conflicts: Stream.Stream<DataConflict, SyncError>
+  /**
+   * Stream of sync status updates.
+   * @returns A Stream of status values ("online", "offline", "syncing")
+   */
   readonly status: Stream.Stream<"online" | "offline" | "syncing", never>
+  /**
+   * Establishes the sync connection.
+   * @returns Effect that completes when connection is established or a SyncError
+   */
   readonly connect: () => Effect.Effect<void, SyncError>
+  /**
+   * Closes the sync connection.
+   * @returns Effect that completes when connection is closed
+   */
   readonly disconnect: () => Effect.Effect<void, never>
 }
 
+/**
+ * Sync service interface that extends the SyncEngine.
+ */
 export interface SyncService extends SyncEngine {}
+
+/**
+ * Context tag for the SyncService.
+ */
 export const SyncService = Context.GenericTag<SyncService>("SyncService")
 
-// WebSocket Sync Implementation
+/**
+ * Layer providing WebSocket implementation of the SyncService.
+ * This implementation uses WebSocket connections to synchronize data between replicas.
+ * @param url - The WebSocket URL to connect to
+ * @returns A Layer that provides a SyncService implementation
+ */
 export const WebSocketSyncLive = (url: string) =>
   Layer.effect(
     SyncService,
@@ -389,22 +482,49 @@ export const WebSocketSyncLive = (url: string) =>
     })
   )
 
-// Manual Sync for offline-only
+/**
+ * Layer providing manual sync implementation of the SyncService.
+ * This implementation performs no network operations and is primarily for offline-only scenarios.
+ */
 export const ManualSyncLive = Layer.succeed(
   SyncService,
   {
+    /**
+     * Pushes operations (no-op in manual sync).
+     * @param operations - Operations to push (ignored in manual sync)
+     * @returns Effect that completes immediately
+     */
     push: () => Effect.void,
+    /**
+     * Pulls operations (returns empty array in manual sync).
+     * @param config - Optional configuration (ignored in manual sync)
+     * @returns Effect that resolves to an empty array of operations
+     */
     pull: (config?: PartialSyncConfig) => Effect.succeed([]),
+    /**
+     * Reconciles operations (returns accepted status in manual sync).
+     * @param request - Reconciliation request
+     * @returns Effect that resolves to an accepted reconciliation response
+     */
     reconcile: (request: ReconciliationRequest) =>
       Effect.succeed<ReconciliationResponse>({
         id: request.id,
         status: "accepted",
         resolvedState: request.clientState
       }),
+    /**
+     * Performs partial sync (no-op in manual sync).
+     * @param config - Configuration for partial sync (ignored in manual sync)
+     * @returns Effect that completes immediately
+     */
     partialSync: (config: PartialSyncConfig) => Effect.void,
+    /** Stream of conflicts (empty in manual sync) */
     conflicts: Stream.empty,
+    /** Stream of status updates (always offline in manual sync) */
     status: Stream.succeed("offline" as const),
+    /** Establishes connection (no-op in manual sync) */
     connect: () => Effect.void,
+    /** Closes connection (no-op in manual sync) */
     disconnect: () => Effect.void
   }
 )

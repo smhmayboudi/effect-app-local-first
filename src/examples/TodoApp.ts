@@ -1,3 +1,8 @@
+/**
+ * Example Todo application demonstrating the LocalFirst framework.
+ * This application showcases various CRDT collections and their usage in a practical todo app scenario.
+ */
+
 import { Console, Effect, Layer, Stream } from "effect"
 import {
   GSetCollection,
@@ -11,24 +16,43 @@ import {
 import { MemoryStorageLive } from "../Storage.js"
 import { ManualSyncLive } from "../Sync.js"
 
-// Application configuration
+/**
+ * Application configuration for the Todo app.
+ */
 const config = {
+  /** Storage backend to use */
   storage: "indexeddb" as const,
+  /** Sync strategy to use */
   sync: "websocket" as const,
+  /** URL for WebSocket synchronization */
   syncUrl: "ws://localhost:8080/sync",
+  /** Unique identifier for this replica in the distributed system */
   replicaId: "client-" + Math.random().toString(36).substr(2, 9),
+  /** Interval in milliseconds for automatic synchronization */
   autoSyncInterval: 5000
 }
 
-// Todo item schema
+/**
+ * Interface representing a todo item with its properties.
+ */
 interface Todo {
+  /** Unique identifier for the todo item */
   readonly id: string
+  /** Text content of the todo */
   readonly text: string
+  /** Whether the todo is completed */
   readonly completed: boolean
+  /** Timestamp of when the todo was created */
   readonly createdAt: number
 }
 
-// Todo application
+/**
+ * The main todo application effect that demonstrates:
+ * - Using various CRDT collections (ORMap, LWWRegister, GSet, PNCounter, RGA, TwoPhaseSet)
+ * - Initializing data in different collections
+ * - Performing operations on the collections
+ * - Watching for changes in the collections
+ */
 const todoApp = Effect.gen(function*() {
   // Create collections
   const todos = new ORMapCollection<Todo>("todos")
@@ -106,7 +130,9 @@ const todoApp = Effect.gen(function*() {
   return { todos, userProfile, userTags, userActivityCounter, todoListHistory, completedTodoIds, watchFiber }
 })
 
-// Run the application
+/**
+ * The main application effect with proper layer configuration.
+ */
 const main = todoApp.pipe(
   Effect.provide(
     Layer.mergeAll(
@@ -118,6 +144,7 @@ const main = todoApp.pipe(
   Effect.catchAll((error) => Console.error("Application failed:", error))
 )
 
+// Run the application
 Effect.runPromise(main).catch((error) => {
   console.error("Failed to run application:", error)
 })
