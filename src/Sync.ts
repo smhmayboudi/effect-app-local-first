@@ -191,13 +191,13 @@ export const WebSocketSyncLive = (url: string) =>
             }
 
             ws.onerror = (error) => {
-              resume(Effect.fail(
+              resume(
                 new SyncError({
                   message: "WebSocket connection failed",
                   code: "CONNECTION_ERROR",
                   cause: error
                 })
-              ))
+              )
             }
 
             ws.onmessage = (event) => {
@@ -232,13 +232,13 @@ export const WebSocketSyncLive = (url: string) =>
               }
             }
           } catch (error) {
-            resume(Effect.fail(
+            resume(
               new SyncError({
                 message: "Failed to create WebSocket",
                 code: "INIT_ERROR",
                 cause: error
               })
-            ))
+            )
           }
         })
 
@@ -253,13 +253,11 @@ export const WebSocketSyncLive = (url: string) =>
       const push = (operations: Array<SyncOperation>): Effect.Effect<void, SyncError> =>
         Effect.gen(function*() {
           if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return yield* Effect.fail(
-              new SyncError({
-                message: "WebSocket not connected",
-                code: "NOT_CONNECTED",
-                cause: null
-              })
-            )
+            return yield* new SyncError({
+              message: "WebSocket not connected",
+              code: "NOT_CONNECTED",
+              cause: null
+            })
           }
 
           yield* Queue.offer(statusQueue, "syncing")
@@ -273,13 +271,13 @@ export const WebSocketSyncLive = (url: string) =>
               }))
 
               const timeout = setTimeout(() => {
-                resume(Effect.fail(
+                resume(
                   new SyncError({
                     message: "Push operation timeout",
                     code: "TIMEOUT",
                     cause: null
                   })
-                ))
+                )
               }, 10000)
 
               const messageHandler = (event: MessageEvent) => {
@@ -294,13 +292,13 @@ export const WebSocketSyncLive = (url: string) =>
 
               ws!.addEventListener("message", messageHandler)
             } catch (error) {
-              resume(Effect.fail(
+              resume(
                 new SyncError({
                   message: "Failed to send operations",
                   code: "SEND_ERROR",
                   cause: error
                 })
-              ))
+              )
             }
           })
         })
@@ -308,13 +306,11 @@ export const WebSocketSyncLive = (url: string) =>
       const pull = (config?: PartialSyncConfig): Effect.Effect<Array<SyncOperation>, SyncError> =>
         Effect.gen(function*() {
           if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return yield* Effect.fail(
-              new SyncError({
-                message: "WebSocket not connected",
-                code: "NOT_CONNECTED",
-                cause: null
-              })
-            )
+            return yield* new SyncError({
+              message: "WebSocket not connected",
+              code: "NOT_CONNECTED",
+              cause: null
+            })
           }
 
           return yield* Effect.async<Array<SyncOperation>, SyncError>((resume) => {
@@ -327,13 +323,13 @@ export const WebSocketSyncLive = (url: string) =>
               }))
 
               const timeout = setTimeout(() => {
-                resume(Effect.fail(
+                resume(
                   new SyncError({
                     message: "Pull operation timeout",
                     code: "TIMEOUT",
                     cause: null
                   })
-                ))
+                )
               }, 10000)
 
               const messageHandler = (event: MessageEvent) => {
@@ -347,13 +343,13 @@ export const WebSocketSyncLive = (url: string) =>
 
               ws!.addEventListener("message", messageHandler)
             } catch (error) {
-              resume(Effect.fail(
+              resume(
                 new SyncError({
                   message: "Failed to pull operations",
                   code: "PULL_ERROR",
                   cause: error
                 })
-              ))
+              )
             }
           })
         })
@@ -361,13 +357,11 @@ export const WebSocketSyncLive = (url: string) =>
       const reconcile = (request: ReconciliationRequest): Effect.Effect<ReconciliationResponse, SyncError> =>
         Effect.gen(function*() {
           if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return yield* Effect.fail(
-              new SyncError({
-                message: "WebSocket not connected",
-                code: "NOT_CONNECTED",
-                cause: null
-              })
-            )
+            return yield* new SyncError({
+              message: "WebSocket not connected",
+              code: "NOT_CONNECTED",
+              cause: null
+            })
           }
 
           yield* Queue.offer(statusQueue, "syncing")
@@ -380,13 +374,13 @@ export const WebSocketSyncLive = (url: string) =>
               }))
 
               const timeout = setTimeout(() => {
-                resume(Effect.fail(
+                resume(
                   new SyncError({
                     message: "Reconciliation operation timeout",
                     code: "TIMEOUT",
                     cause: null
                   })
-                ))
+                )
               }, 15000) // Longer timeout for reconciliation
 
               const messageHandler = (event: MessageEvent) => {
@@ -401,13 +395,13 @@ export const WebSocketSyncLive = (url: string) =>
 
               ws!.addEventListener("message", messageHandler)
             } catch (error) {
-              resume(Effect.fail(
+              resume(
                 new SyncError({
                   message: "Failed to send reconciliation request",
                   code: "RECONCILE_ERROR",
                   cause: error
                 })
-              ))
+              )
             }
           })
         })
@@ -415,13 +409,11 @@ export const WebSocketSyncLive = (url: string) =>
       const partialSync = (config: PartialSyncConfig): Effect.Effect<void, SyncError> =>
         Effect.gen(function*() {
           if (!ws || ws.readyState !== WebSocket.OPEN) {
-            return yield* Effect.fail(
-              new SyncError({
-                message: "WebSocket not connected",
-                code: "NOT_CONNECTED",
-                cause: null
-              })
-            )
+            return yield* new SyncError({
+              message: "WebSocket not connected",
+              code: "NOT_CONNECTED",
+              cause: null
+            })
           }
 
           yield* Queue.offer(statusQueue, "syncing")
@@ -434,13 +426,13 @@ export const WebSocketSyncLive = (url: string) =>
               }))
 
               const timeout = setTimeout(() => {
-                resume(Effect.fail(
+                resume(
                   new SyncError({
                     message: "Partial sync operation timeout",
                     code: "TIMEOUT",
                     cause: null
                   })
-                ))
+                )
               }, 10000)
 
               const messageHandler = (event: MessageEvent) => {
@@ -455,13 +447,13 @@ export const WebSocketSyncLive = (url: string) =>
 
               ws!.addEventListener("message", messageHandler)
             } catch (error) {
-              resume(Effect.fail(
+              resume(
                 new SyncError({
                   message: "Failed to initiate partial sync",
                   code: "PARTIAL_SYNC_ERROR",
                   cause: error
                 })
-              ))
+              )
             }
           })
         })

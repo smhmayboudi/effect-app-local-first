@@ -452,12 +452,10 @@ export class Collection<A> {
       return yield* storage.get(self.name).pipe(
         Effect.map((data) => data as A),
         Effect.catchTag("StorageError", () =>
-          Effect.fail(
-            new CRDTError({
-              message: `Collection ${self.name} not found`,
-              operation: "get"
-            })
-          ))
+          new CRDTError({
+            message: `Collection ${self.name} not found`,
+            operation: "get"
+          }))
       )
     })
   }
@@ -478,10 +476,7 @@ export class Collection<A> {
   watch(): Stream.Stream<A, LocalFirstError, StorageService> {
     const self = this
     return Stream.unwrapScoped(
-      Effect.map(
-        StorageService,
-        (storage) => storage.watch(self.name)
-      ) as Effect.Effect<Stream.Stream<unknown, StorageError, never>, StorageError, StorageService>
+      Effect.map(StorageService, (storage) => storage.watch(self.name))
     ).pipe(
       Stream.map((data) => data as A),
       Stream.mapError((error) =>
@@ -982,7 +977,7 @@ const applyOperations = (
   storage: StorageService,
   vectorClock: Ref.Ref<VectorClock>,
   replicaId: string
-): Effect.Effect<void, StorageError, never> =>
+): Effect.Effect<void, LocalFirstError, never> =>
   Effect.gen(function*() {
     const backend = storage as StorageBackend
     for (const operation of operations) {
@@ -995,15 +990,11 @@ const applyOperations = (
       }
       if (operation.type === "set") {
         yield* backend.set(operation.key, operation.value!).pipe(
-          Effect.catchAll((error) =>
-            Effect.fail(new StorageError({ message: "Failed to set operation", cause: error }))
-          )
+          Effect.catchAll((error) => new StorageError({ message: "Failed to set operation", cause: error }))
         )
       } else if (operation.type === "delete") {
         yield* backend.delete(operation.key).pipe(
-          Effect.catchAll((error) =>
-            Effect.fail(new StorageError({ message: "Failed to delete operation", cause: error }))
-          )
+          Effect.catchAll((error) => new StorageError({ message: "Failed to delete operation", cause: error }))
         )
       } else if (operation.type === "reconcile") {
         // Handle reconciliation operations - apply server state updates
@@ -1069,18 +1060,16 @@ const performReconciliation = (
         if (conflict.resolution === "server") {
           // Apply server value
           yield* (storage as StorageBackend).set(conflict.key, conflict.serverValue).pipe(
-            Effect.catchAll((error) =>
-              Effect.fail(new StorageError({ message: `Failed to resolve conflict for ${conflict.key}`, cause: error }))
-            )
+            Effect.catchAll((
+              error
+            ) => new StorageError({ message: `Failed to resolve conflict for ${conflict.key}`, cause: error }))
           )
         } else if (conflict.resolution === "merge") {
           // Attempt to merge values (this would require custom logic per CRDT type)
           // For now, we'll default to server value, but in a real system this would depend on the CRDT type
           yield* (storage as StorageBackend).set(conflict.key, conflict.serverValue).pipe(
             Effect.catchAll((error) =>
-              Effect.fail(
-                new StorageError({ message: `Failed to resolve merge conflict for ${conflict.key}`, cause: error })
-              )
+              new StorageError({ message: `Failed to resolve merge conflict for ${conflict.key}`, cause: error })
             )
           )
         }

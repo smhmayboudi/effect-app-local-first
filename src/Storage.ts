@@ -209,12 +209,12 @@ export const IndexedDBLive = Layer.scoped(
 
         request.onsuccess = () => resume(Effect.succeed(request.result))
         request.onerror = () =>
-          resume(Effect.fail(
+          resume(
             new StorageError({
               message: "Transaction failed",
               cause: request.error
             })
-          ))
+          )
       })
 
     return {
@@ -224,7 +224,7 @@ export const IndexedDBLive = Layer.scoped(
           Effect.flatMap((result) =>
             result
               ? Effect.succeed(result.value)
-              : Effect.fail(new StorageError({ message: `Key not found: ${key}` }))
+              : new StorageError({ message: `Key not found: ${key}` })
           )
         ),
 
@@ -271,7 +271,7 @@ export const IndexedDBLive = Layer.scoped(
                   return result.value as T
                 }
               })
-              : Effect.fail(new StorageError({ message: `Key not found: ${key}` }))
+              : new StorageError({ message: `Key not found: ${key}` })
           )
         ),
 
@@ -293,7 +293,7 @@ export const IndexedDBLive = Layer.scoped(
                   return new TextEncoder().encode(JSON.stringify(result.value))
                 }
               })
-              : Effect.fail(new StorageError({ message: `Key not found: ${key}` }))
+              : new StorageError({ message: `Key not found: ${key}` })
           )
         ),
 
