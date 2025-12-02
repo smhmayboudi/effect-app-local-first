@@ -205,7 +205,7 @@ export class LocalFirst extends Context.Tag("@core/LocalFirst")<
     /** Sync service for data synchronization */
     readonly sync: SyncService
     /** Hub service for messaging */
-    readonly hubService: HubService
+    readonly hub: HubService
     /** Vector clock for tracking causality */
     readonly vectorClock: Ref.Ref<VectorClock>
     /** Optional authorization service */
@@ -305,7 +305,7 @@ export const LocalFirstLive = (config: LocalFirstConfig) =>
     Effect.gen(function*() {
       const storage = yield* StorageService
       const sync = yield* SyncService
-      const hubService = yield* HubService
+      const hub = yield* HubService
       const vectorClock = yield* Ref.make(VectorClock.empty())
       let authorizationService: AuthorizationService | undefined = undefined
       // Initialize authorization service if enabled
@@ -337,14 +337,14 @@ export const LocalFirstLive = (config: LocalFirstConfig) =>
         config: LocalFirstConfig
         storage: StorageService
         sync: SyncService
-        hubService: HubService
+        hub: HubService
         vectorClock: Ref.Ref<VectorClock>
         authorizationService?: AuthorizationService
       } = {
         config,
-        storage: storage as StorageService,
-        sync: sync as SyncService,
-        hubService: hubService as HubService,
+        storage,
+        sync,
+        hub,
         vectorClock
       }
 
@@ -436,8 +436,8 @@ export class Collection<A> {
     strategy?: HubStrategy
   ): Effect.Effect<Hub<T>, LocalFirstError, HubService> {
     return Effect.gen(function*() {
-      const hubService = yield* HubService
-      return yield* hubService.createHub<T>(strategy)
+      const hub = yield* HubService
+      return yield* hub.createHub<T>(strategy)
     })
   }
 
@@ -450,12 +450,7 @@ export class Collection<A> {
     return Effect.gen(function*() {
       const storage = yield* StorageService
       return yield* storage.get(self.name).pipe(
-        Effect.map((data) => data as A),
-        Effect.catchTag("StorageError", () =>
-          new CRDTError({
-            message: `Collection ${self.name} not found`,
-            operation: "get"
-          }))
+        Effect.map((data) => data as A)
       )
     })
   }
@@ -990,11 +985,11 @@ const applyOperations = (
       }
       if (operation.type === "set") {
         yield* backend.set(operation.key, operation.value!).pipe(
-          Effect.catchAll((error) => new StorageError({ message: "Failed to set operation", cause: error }))
+          Effect.mapError((error) => new StorageError({ message: "Failed to set operation", cause: error }))
         )
       } else if (operation.type === "delete") {
         yield* backend.delete(operation.key).pipe(
-          Effect.catchAll((error) => new StorageError({ message: "Failed to delete operation", cause: error }))
+          Effect.mapError((error) => new StorageError({ message: "Failed to delete operation", cause: error }))
         )
       } else if (operation.type === "reconcile") {
         // Handle reconciliation operations - apply server state updates
@@ -1060,7 +1055,7 @@ const performReconciliation = (
         if (conflict.resolution === "server") {
           // Apply server value
           yield* (storage as StorageBackend).set(conflict.key, conflict.serverValue).pipe(
-            Effect.catchAll((
+            Effect.mapError((
               error
             ) => new StorageError({ message: `Failed to resolve conflict for ${conflict.key}`, cause: error }))
           )
@@ -1068,7 +1063,7 @@ const performReconciliation = (
           // Attempt to merge values (this would require custom logic per CRDT type)
           // For now, we'll default to server value, but in a real system this would depend on the CRDT type
           yield* (storage as StorageBackend).set(conflict.key, conflict.serverValue).pipe(
-            Effect.catchAll((error) =>
+            Effect.mapError((error) =>
               new StorageError({ message: `Failed to resolve merge conflict for ${conflict.key}`, cause: error })
             )
           )
