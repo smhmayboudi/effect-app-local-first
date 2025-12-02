@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { GSet, LWWRegister, OrderedSet, ORMap, PNCounter, RGA, TwoPhaseSet, VectorClock } from "../src/Core"
+import { GSet, LWWRegister, OrderedSet, ORMap, PNCounter, RGA, TwoPhaseSet, VectorClock } from "../src/Core.js"
 
 describe("Core CRDT Tests", () => {
   describe("VectorClock", () => {

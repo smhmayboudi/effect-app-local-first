@@ -181,7 +181,8 @@ describe("Integration Tests - Complete System", () => {
     it("should handle reconciliation requests and responses", () => {
       const clientClock = VectorClock.empty()
         .increment("client1")
-        .increment("client2", 2) // Simulate multiple operations
+        .increment("client2")
+        .increment("client2") // Simulate multiple operations by calling increment twice
 
       const request: ReconciliationRequest = {
         id: "reconcile-req-1",
@@ -214,14 +215,6 @@ describe("Integration Tests - Complete System", () => {
 
   describe("Hub Integration", () => {
     it("should support messaging patterns with CRDT data", () => {
-      // Even though we can't instantiate a real Hub, we can test the patterns
-      const messageTypes = [
-        "user-update",
-        "profile-change",
-        "setting-update",
-        "counter-adjustment"
-      ]
-
       // Example of how messages might carry CRDT data
       interface UserUpdateMessage {
         userId: string

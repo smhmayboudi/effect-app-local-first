@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import type { Hub, HubService, HubStrategy as HubStrategyType } from "../src/Hub.js"
+import type { Hub, HubError, HubService, HubStrategy as HubStrategyType } from "../src/Hub.js"
 import { HubStrategy } from "../src/Hub.js"
 
 describe("Hub System Tests", () => {
@@ -38,9 +38,18 @@ describe("Hub System Tests", () => {
         publish: (_message: string) => {
           return Effect.succeed(void 0)
         },
+        publishAll(_messages: Iterable<string>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
         subscribe: () => {
           // In a real implementation, this would return a Stream
           return Effect.succeed(null as any)
+        },
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
         }
       }
 
@@ -52,17 +61,46 @@ describe("Hub System Tests", () => {
       // Test with different message types
       const stringHub: Hub<string> = {
         publish: (_message: string) => Effect.succeed(void 0),
-        subscribe: () => Effect.succeed(null as any)
+        publishAll(_messages: Iterable<string>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
+        subscribe: () => Effect.succeed(null as any),
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        }
       }
 
       const objHub: Hub<{ id: number; name: string }> = {
         publish: (_message: { id: number; name: string }) => Effect.succeed(void 0),
-        subscribe: () => Effect.succeed(null as any)
+        publishAll(_messages: Iterable<{ id: number; name: string }>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
+        subscribe: () => Effect.succeed(null as any),
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        }
       }
 
       const complexHub: Hub<{ data: Array<string>; metadata: Record<string, unknown> }> = {
         publish: (_message: { data: Array<string>; metadata: Record<string, unknown> }) => Effect.succeed(void 0),
-        subscribe: () => Effect.succeed(null as any)
+        publishAll(
+          _messages: Iterable<{ data: Array<string>; metadata: Record<string, unknown> }>
+        ): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
+        subscribe: () => Effect.succeed(null as any),
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        }
       }
 
       expect(stringHub).toBeDefined()
@@ -114,14 +152,14 @@ describe("Hub System Tests", () => {
   describe("Hub Implementation Patterns", () => {
     it("should work with Effect monad patterns", () => {
       // Example of how a Hub would be used with Effect
-      const exampleEffect = Effect.gen(function*($) {
-        const hub = yield* $(Effect.succeed({
+      const exampleEffect = Effect.gen(function*() {
+        const hub = yield* Effect.succeed({
           publish: (_msg: string) => Effect.succeed(void 0),
           subscribe: () => Effect.succeed("stream")
-        }))
+        })
 
-        yield* $(hub.publish("Hello, world!"))
-        const stream = yield* $(hub.subscribe())
+        yield* hub.publish("Hello, world!")
+        const stream = yield* hub.subscribe()
         return stream
       })
 
@@ -135,9 +173,18 @@ describe("Hub System Tests", () => {
           // In a real implementation, this would handle concurrent publishing
           return Effect.succeed(void 0)
         },
+        publishAll(_messages: Iterable<number>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
         subscribe: () => {
           // This would return a stream that multiple consumers can subscribe to
           return Effect.succeed(null as any)
+        },
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
         }
       }
 
@@ -148,7 +195,16 @@ describe("Hub System Tests", () => {
       // Verification that the interface supports multiple subscribers
       const multiSubscriberHub: Hub<string> = {
         publish: (_message: string) => Effect.succeed(void 0),
-        subscribe: () => Effect.succeed(null as any) // Each call returns a separate stream
+        publishAll(_messages: Iterable<string>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
+        subscribe: () => Effect.succeed(null as any), // Each call returns a separate stream
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        }
       }
 
       // Multiple subscribers can theoretically call subscribe()
@@ -166,12 +222,30 @@ describe("Hub System Tests", () => {
     it("should maintain type safety for messages", () => {
       const stringHub: Hub<string> = {
         publish: (_message: string) => Effect.succeed(void 0),
-        subscribe: () => Effect.succeed(null as any)
+        publishAll(_messages: Iterable<string>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
+        subscribe: () => Effect.succeed(null as any),
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        }
       }
 
       const numberHub: Hub<number> = {
         publish: (_message: number) => Effect.succeed(void 0),
-        subscribe: () => Effect.succeed(null as any)
+        publishAll(_messages: Iterable<number>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
+        subscribe: () => Effect.succeed(null as any),
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        }
       }
 
       // These should type-check correctly
@@ -195,7 +269,16 @@ describe("Hub System Tests", () => {
 
       const userHub: Hub<UserMessage> = {
         publish: (_message: UserMessage) => Effect.succeed(void 0),
-        subscribe: () => Effect.succeed(null as any)
+        publishAll(_messages: Iterable<UserMessage>): Effect.Effect<void, HubError> {
+          throw new Error("Function not implemented.")
+        },
+        subscribe: () => Effect.succeed(null as any),
+        subscriberCount(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        },
+        size(): Effect.Effect<number, never> {
+          throw new Error("Function not implemented.")
+        }
       }
 
       const message: UserMessage = {

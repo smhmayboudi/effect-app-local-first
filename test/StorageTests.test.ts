@@ -1,3 +1,4 @@
+import { Effect, Stream } from "effect"
 import { describe, expect, it } from "vitest"
 import {
   type DatabaseConfig,
@@ -127,8 +128,8 @@ describe("Storage System Tests", () => {
       }
 
       expect(query.params.customField).toBe("customValue")
-      expect(query.params.nested.deep).toBe("value")
-      expect(query.params.nested.number).toBe(42)
+      expect((query.params.nested as { deep: string; number: number }).deep).toBe("value")
+      expect((query.params.nested as { deep: string; number: number }).number).toBe(42)
       expect((query.params.array as Array<number>)[0]).toBe(1)
     })
   })
@@ -203,7 +204,7 @@ describe("Storage System Tests", () => {
       expect(config.options.version).toBe(2)
       expect(config.options.upgrade).toBe(true)
       expect(Array.isArray(config.options.features)).toBe(true)
-      expect(config.options.settings.maxConnections).toBe(10)
+      expect((config.options.settings as { maxConnections: number }).maxConnections).toBe(10)
     })
 
     it("should support custom data model in config", () => {
@@ -214,8 +215,8 @@ describe("Storage System Tests", () => {
       }
 
       expect(config.dataModel).toBeDefined()
-      expect(config.dataModel.serialize).toBeDefined()
-      expect(config.dataModel.deserialize).toBeDefined()
+      expect(config.dataModel!.serialize).toBeDefined()
+      expect(config.dataModel!.deserialize).toBeDefined()
     })
   })
 
@@ -224,19 +225,23 @@ describe("Storage System Tests", () => {
       // This is an interface test, just ensuring correct structure
       const backend: StorageBackend = {
         get: (key: string) => {
-          return Promise.resolve({ value: "test", key }).then((res) => res.value)
+          return Effect.succeed("test")
         },
         set: (key: string, value: unknown) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         delete: (key: string) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         keys: () => {
-          return Promise.resolve(["key1", "key2"])
+          return Effect.succeed(["key1", "key2"] as const)
         },
         clear: () => {
-          return Promise.resolve(void 0)
+          return Effect.void
+        },
+        watch: (key: string) => {
+          // Mock implementation for watch using Stream
+          return Stream.succeed("watch result")
         }
       }
 
@@ -252,34 +257,38 @@ describe("Storage System Tests", () => {
     it("should extend StorageBackend with additional methods", () => {
       const backend: ExtendedStorageBackend = {
         get: (key: string) => {
-          return Promise.resolve({ value: "test", key }).then((res) => res.value)
+          return Effect.succeed("test")
         },
         set: (key: string, value: unknown) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         delete: (key: string) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         keys: () => {
-          return Promise.resolve(["key1", "key2"])
+          return Effect.succeed(["key1", "key2"] as const)
         },
         clear: () => {
-          return Promise.resolve(void 0)
+          return Effect.void
+        },
+        watch: (key: string) => {
+          // Mock implementation for watch using Stream
+          return Stream.succeed("watch result")
         },
         getWithModel: <T>(key: string, model: DataModel) => {
-          return Promise.resolve({} as T)
+          return Effect.succeed({} as T)
         },
         setWithModel: (key: string, value: unknown, model: DataModel) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         getRaw: (key: string) => {
-          return Promise.resolve(new Uint8Array())
+          return Effect.succeed(new Uint8Array())
         },
         setRaw: (key: string, data: Uint8Array) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         query: (query: StorageQuery) => {
-          return Promise.resolve([])
+          return Effect.succeed([])
         }
       }
 
@@ -299,39 +308,43 @@ describe("Storage System Tests", () => {
     it("should use DataModel for model-specific operations", () => {
       const backend: ExtendedStorageBackend = {
         get: (key: string) => {
-          return Promise.resolve({ value: "test", key }).then((res) => res.value)
+          return Effect.succeed("test")
         },
         set: (key: string, value: unknown) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         delete: (key: string) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         keys: () => {
-          return Promise.resolve(["key1", "key2"])
+          return Effect.succeed(["key1", "key2"] as const)
         },
         clear: () => {
-          return Promise.resolve(void 0)
+          return Effect.void
+        },
+        watch: (key: string) => {
+          // Mock implementation for watch using Stream
+          return Stream.succeed("watch result")
         },
         getWithModel: <T>(key: string, model: DataModel) => {
           // Simulate getting raw data and deserializing with provided model
           const rawData = new TextEncoder().encode(JSON.stringify({ data: "test" }))
-          return Promise.resolve(model.deserialize<T>(rawData))
+          return Effect.succeed(model.deserialize<T>(rawData))
         },
         setWithModel: (key: string, value: unknown, model: DataModel) => {
           // Simulate serializing with provided model and storing
-          const serialized = model.serialize(value)
+          model.serialize(value)
           // Store the serialized data
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         getRaw: (key: string) => {
-          return Promise.resolve(new Uint8Array([72, 101, 108, 108, 111])) // "Hello" in bytes
+          return Effect.succeed(new Uint8Array([72, 101, 108, 108, 111])) // "Hello" in bytes
         },
         setRaw: (key: string, data: Uint8Array) => {
-          return Promise.resolve(void 0)
+          return Effect.void
         },
         query: (query: StorageQuery) => {
-          return Promise.resolve([{ result: "data" }])
+          return Effect.succeed([{ result: "data" }])
         }
       }
 

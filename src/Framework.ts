@@ -422,7 +422,7 @@ export class Collection<A> {
    * @param name - The name of the collection used for storage and retrieval
    */
   constructor(
-    private readonly name: string
+    readonly name: string
   ) {}
 
   /**
