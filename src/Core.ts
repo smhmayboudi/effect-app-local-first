@@ -43,20 +43,16 @@ export class VectorClock {
   compare(other: VectorClock): -1 | 0 | 1 {
     let allLess = true
     let allGreater = true
-
     const allKeys = new Set([
       ...Object.keys(this.timestamps),
       ...Object.keys(other.timestamps)
     ])
-
     for (const key of allKeys) {
       const a = this.timestamps[key] || 0
       const b = other.timestamps[key] || 0
-
       if (a < b) allGreater = false
       if (a > b) allLess = false
     }
-
     if (allLess && !allGreater) return -1 // Less
     if (allGreater && !allLess) return 1 // Greater
     return 0 // Equal
@@ -328,7 +324,6 @@ export class TombstoneSet<A> {
       // Tombstone is more recent, don't re-add
       return this
     }
-
     return new TombstoneSet<A>(
       new Map(this.elements).set(id, { value, timestamp, replicaId }),
       new Map(this.tombstones) // Keep tombstones unchanged
@@ -349,14 +344,11 @@ export class TombstoneSet<A> {
       // Element is more recent, don't tombstone
       return this
     }
-
     const newTombstones = new Map(this.tombstones)
     newTombstones.set(id, { timestamp, replicaId })
-
     // Remove from elements if it exists
     const newElements = new Map(this.elements)
     newElements.delete(id)
-
     return new TombstoneSet<A>(newElements, newTombstones)
   }
 
@@ -368,17 +360,14 @@ export class TombstoneSet<A> {
   has(id: string): boolean {
     const element = this.elements.get(id)
     const tombstone = this.tombstones.get(id)
-
     // If element doesn't exist, it's not present
     if (!element) {
       return false
     }
-
     // If element exists but there's no tombstone, it's present
     if (!tombstone) {
       return true
     }
-
     // If both exist, check which is more recent
     return element.timestamp > tombstone.timestamp
   }
@@ -412,11 +401,9 @@ export class TombstoneSet<A> {
     result.sort((a, b) => {
       const elementA = this.elements.get(a.id)!
       const elementB = this.elements.get(b.id)!
-
-      if (elementA.timestamp !== elementB.timestamp) {
-        return elementA.timestamp - elementB.timestamp
-      }
-      return elementA.replicaId.localeCompare(elementB.replicaId)
+      return elementA.timestamp !== elementB.timestamp
+        ? elementA.timestamp - elementB.timestamp
+        : elementA.replicaId.localeCompare(elementB.replicaId)
     })
     return result
   }
@@ -428,7 +415,6 @@ export class TombstoneSet<A> {
    */
   merge(other: TombstoneSet<A>): TombstoneSet<A> {
     const mergedElements = new Map(this.elements)
-
     // Merge elements, keeping the one with the later timestamp
     for (const [id, otherElement] of other.elements) {
       const myElement = mergedElements.get(id)
@@ -444,10 +430,8 @@ export class TombstoneSet<A> {
         }
       }
     }
-
     // Merge tombstones, keeping the one with the later timestamp
     const mergedTombstones = new Map(this.tombstones)
-
     for (const [id, otherTombstone] of other.tombstones) {
       const myTombstone = mergedTombstones.get(id)
       if (!myTombstone) {
@@ -462,7 +446,6 @@ export class TombstoneSet<A> {
         }
       }
     }
-
     // Check all elements against all tombstones to see if any should be removed
     // due to a more recent tombstone
     for (const [id, element] of mergedElements) {
@@ -472,7 +455,6 @@ export class TombstoneSet<A> {
         mergedElements.delete(id)
       }
     }
-
     // Check all tombstones against all elements to see if any tombstones
     // are overridden by more recent additions
     for (const [id, tombstone] of mergedTombstones) {
@@ -482,7 +464,6 @@ export class TombstoneSet<A> {
         mergedTombstones.delete(id)
       }
     }
-
     return new TombstoneSet<A>(mergedElements, mergedTombstones)
   }
 }
@@ -527,7 +508,7 @@ export class RGA<A> {
    * @returns A unique string ID for the element
    */
   private static generateId(replicaId: string, timestamp: number): string {
-    return `${replicaId}:${timestamp}:${Math.random().toString(36).substr(2, 5)}`
+    return `${replicaId}:${timestamp}:${Math.random().toString(36).slice(2, 5)}`
   }
 
   /**
@@ -559,8 +540,28 @@ export class RGA<A> {
    * @returns A position string that comes before the input position
    */
   private static calculatePositionBefore(pos: string): string {
-    // Simplified: just add ".1" to the position
-    return `${pos}.1`
+    // To create a position before the given position, we could try to modify it
+    // to be lexicographically smaller than pos.
+    // For example, if pos is "0.1", we might return "0.0.999" (theoretically)
+    // But a simple approach is to go back in the sequence of positions
+    // The most reliable approach is to try to decrement one of the components.
+    const parts = pos.split(".").map(Number)
+    // Try to decrease a component starting from the end
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (parts[i] > 0) {
+        parts[i]--
+        // Make all following components as large as possible to stay before pos
+        for (let j = i + 1; j < parts.length; j++) {
+          parts[j] = 0 // Actually, setting to 0 keeps it smaller
+        }
+        return parts.join(".")
+      }
+      // If this component is 0, we continue to the next one (borrowing concept)
+    }
+    // If all components are 0, we can't go lower using this method
+    // We'll return a special case - this shouldn't normally happen in RGA usage
+    // since positions typically increase
+    return "0.0" // Default start position if we can't go lower
   }
 
   /**
@@ -570,9 +571,15 @@ export class RGA<A> {
    * @returns A position string that comes after the input position
    */
   private static calculatePositionAfter(pos: string): string {
-    // Simplified: increment the last number in the position
+    // Increment the last number in the position to get a position that sorts after
     const parts = pos.split(".")
-    const lastNum = parseInt(parts[parts.length - 1])
+    if (parts.length === 0) {
+      return "0.1" // Default next position after initial
+    }
+    let lastNum = parseInt(parts[parts.length - 1])
+    if (isNaN(lastNum)) {
+      lastNum = 0 // Fallback if parsing fails
+    }
     parts[parts.length - 1] = (lastNum + 1).toString()
     return parts.join(".")
   }
@@ -585,8 +592,55 @@ export class RGA<A> {
    * @returns A position string that falls between the two input positions
    */
   private static calculatePositionBetween(prevPos: string, nextPos: string): string {
-    // Simplified: create an intermediate position
-    return `${prevPos}.5`
+    const prevParts = prevPos.split(".").map(Number)
+    const nextParts = nextPos.split(".").map(Number)
+    // Find the common prefix
+    let commonLength = 0
+    while (
+      commonLength < prevParts.length &&
+      commonLength < nextParts.length &&
+      prevParts[commonLength] === nextParts[commonLength]
+    ) {
+      commonLength++
+    }
+    // If prevPos is a prefix of nextPos (e.g., "0.1" and "0.1.1")
+    if (commonLength === prevParts.length) {
+      // Make sure the next differing part in nextPos is > 0 and return prev + [0]
+      if (commonLength < nextParts.length && nextParts[commonLength] > 0) {
+        // We can insert prev + [0] which will be > prev and < next
+        // For example: between "0.1" and "0.1.1", return "0.1.0"
+        return [...prevParts, 0].join(".")
+      } else {
+        // If nextDiffValue is 0 or no difference exists, we need to go deeper
+        // This is a complex case, use an intermediate approach
+        return [...prevParts, 0, 1].join(".")
+      }
+    }
+    // If nextPos is a prefix of prevPos (e.g., "0.1.1" and "0.1") - this shouldn't normally occur
+    if (commonLength === nextParts.length) {
+      // prevPos should be < nextPos in normal usage, so this indicates incorrect input
+      return [...prevParts, 0].join(".")
+    }
+    // The components differ at position commonLength
+    const prevValue = prevParts[commonLength]
+    const nextValue = nextParts[commonLength]
+    // If there's a gap between the values, use the midpoint
+    if (nextValue > prevValue + 1) {
+      const midValue = Math.floor((prevValue + nextValue) / 2)
+      return [...prevParts.slice(0, commonLength), midValue].join(".")
+    } else {
+      // Values are consecutive (nextValue = prevValue + 1), need to continue with prev's sequence
+      // and add a component to make it larger than prev but smaller than next
+      // For example: between "0.1.9" and "0.2.0", we can't use "0.1.5" since "0.1.5" < "0.1.9"
+      // Instead, we use the entire prev sequence and add a small value to make it slightly larger
+      if (commonLength + 1 < prevParts.length) {
+        // If prev has more components after the divergent position, we need to handle carefully
+        return [...prevParts, 0].join(".") // Add a 0 to make it larger than prev but potentially smaller than next
+      } else {
+        // prev has no more components after the divergent position, so we extend with a small number
+        return [...prevParts, 5].join(".") // Add 5 to make it larger than prev
+      }
+    }
   }
 
   /**
@@ -599,11 +653,9 @@ export class RGA<A> {
     const timestamp = Date.now()
     const id = RGA.generateId(replicaId, timestamp)
     const allElements = Array.from(this.elements.values())
-
     // Sort by position to determine the last element
     allElements.sort((a, b) => a.position.localeCompare(b.position))
     const lastPos = allElements.length > 0 ? allElements[allElements.length - 1].position : null
-
     const position = RGA.generatePositionBetween(lastPos, null)
     const newElement: RGAElement<A> = {
       id,
@@ -612,7 +664,6 @@ export class RGA<A> {
       replicaId,
       position
     }
-
     return new RGA<A>(
       new Map(this.elements).set(id, newElement)
     )
@@ -627,13 +678,10 @@ export class RGA<A> {
    */
   insertAt(index: number, value: A, replicaId: string): RGA<A> {
     const allElements = Array.from(this.elements.values())
-
     // Sort by position to get logical order
     allElements.sort((a, b) => a.position.localeCompare(b.position))
-
     let prevPos: string | null = null
     let nextPos: string | null = null
-
     if (index <= 0) {
       // Insert at beginning
       if (allElements.length > 0) {
@@ -649,11 +697,9 @@ export class RGA<A> {
       prevPos = allElements[index - 1].position
       nextPos = allElements[index].position
     }
-
     const timestamp = Date.now()
     const id = RGA.generateId(replicaId, timestamp)
     const position = RGA.generatePositionBetween(prevPos, nextPos)
-
     const newElement: RGAElement<A> = {
       id,
       value,
@@ -661,7 +707,6 @@ export class RGA<A> {
       replicaId,
       position
     }
-
     return new RGA<A>(
       new Map(this.elements).set(id, newElement)
     )
@@ -674,18 +719,14 @@ export class RGA<A> {
    */
   removeAt(index: number): RGA<A> {
     const allElements = Array.from(this.elements.values())
-
     // Sort by position to get logical order
     allElements.sort((a, b) => a.position.localeCompare(b.position))
-
     if (index < 0 || index >= allElements.length) {
       return this // Index out of bounds
     }
-
     const elementToRemove = allElements[index]
     const newElements = new Map(this.elements)
     newElements.delete(elementToRemove.id)
-
     return new RGA<A>(newElements)
   }
 
@@ -696,14 +737,11 @@ export class RGA<A> {
    */
   get(index: number): A | undefined {
     const allElements = Array.from(this.elements.values())
-
     // Sort by position to get logical order
     allElements.sort((a, b) => a.position.localeCompare(b.position))
-
     if (index < 0 || index >= allElements.length) {
       return undefined
     }
-
     return allElements[index].value
   }
 
@@ -721,10 +759,8 @@ export class RGA<A> {
    */
   toArray(): Array<A> {
     const allElements = Array.from(this.elements.values())
-
     // Sort by position to get logical order
     allElements.sort((a, b) => a.position.localeCompare(b.position))
-
     return allElements.map((element) => element.value)
   }
 
@@ -737,7 +773,6 @@ export class RGA<A> {
   merge(other: RGA<A>): RGA<A> {
     // Simply merge the maps - if same ID exists in both, use the one with later timestamp
     const mergedElements = new Map(this.elements)
-
     for (const [id, otherElement] of other.elements) {
       const thisElement = mergedElements.get(id)
       if (!thisElement) {
@@ -754,7 +789,6 @@ export class RGA<A> {
         }
       }
     }
-
     return new RGA<A>(mergedElements)
   }
 }
@@ -816,12 +850,10 @@ export class PNCounter {
     for (const count of this.increments.values()) {
       totalIncrements += count
     }
-
     let totalDecrements = 0
     for (const count of this.decrements.values()) {
       totalDecrements += count
     }
-
     return totalIncrements - totalDecrements
   }
 
@@ -836,13 +868,11 @@ export class PNCounter {
       const current = mergedIncrements.get(replicaId) || 0
       mergedIncrements.set(replicaId, Math.max(current, count))
     }
-
     const mergedDecrements = new Map(this.decrements)
     for (const [replicaId, count] of other.decrements.entries()) {
       const current = mergedDecrements.get(replicaId) || 0
       mergedDecrements.set(replicaId, Math.max(current, count))
     }
-
     return new PNCounter(mergedIncrements, mergedDecrements)
   }
 }
@@ -914,7 +944,6 @@ export class OrderedSet<A> {
       // Element was tombstoned, don't re-add
       return this
     }
-
     return new OrderedSet<A>(
       new Map(this.elements).set(id, { value, timestamp, replicaId }),
       this.tombstones
@@ -929,7 +958,6 @@ export class OrderedSet<A> {
   remove(id: string): OrderedSet<A> {
     const newTombstones = new Set(this.tombstones)
     newTombstones.add(id)
-
     return new OrderedSet<A>(
       this.elements,
       newTombstones
@@ -974,7 +1002,6 @@ export class OrderedSet<A> {
     result.sort((a, b) => {
       const elementA = this.elements.get(a.id)!
       const elementB = this.elements.get(b.id)!
-
       if (elementA.timestamp !== elementB.timestamp) {
         return elementA.timestamp - elementB.timestamp
       }
@@ -990,7 +1017,6 @@ export class OrderedSet<A> {
    */
   merge(other: OrderedSet<A>): OrderedSet<A> {
     const mergedElements = new Map(this.elements)
-
     // Merge elements, keeping the one with the later timestamp
     for (const [id, otherElement] of other.elements) {
       const myElement = mergedElements.get(id)
@@ -1006,10 +1032,8 @@ export class OrderedSet<A> {
         }
       }
     }
-
     // Union of tombstones
     const mergedTombstones = new Set([...this.tombstones, ...other.tombstones])
-
     return new OrderedSet<A>(mergedElements, mergedTombstones)
   }
 }
