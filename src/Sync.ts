@@ -101,10 +101,10 @@ export interface PartialSyncConfig {
 }
 
 /**
- * SyncEngine interface defining the core synchronization operations.
+ * SyncService interface defining the core synchronization operations.
  * Provides methods for pushing, pulling, and reconciling data between replicas.
  */
-export interface SyncEngine {
+export interface SyncService {
   /**
    * Pushes operations to other replicas or a central server.
    * @param operations - Array of operations to push
@@ -152,14 +152,9 @@ export interface SyncEngine {
 }
 
 /**
- * Sync service interface that extends the SyncEngine.
- */
-export interface SyncService extends SyncEngine {}
-
-/**
  * Context tag for the SyncService.
  */
-export const SyncService = Context.GenericTag<SyncService>("SyncService")
+export const SyncService = Context.GenericTag<SyncService, SyncService>("SyncService")
 
 /**
  * Layer providing WebSocket implementation of the SyncService.
@@ -492,7 +487,7 @@ export const ManualSyncLive = Layer.succeed(
      * @param config - Optional configuration (ignored in manual sync)
      * @returns Effect that resolves to an empty array of operations
      */
-    pull: (config?: PartialSyncConfig) => Effect.succeed([]),
+    pull: (_config?: PartialSyncConfig) => Effect.succeed([]),
     /**
      * Reconciles operations (returns accepted status in manual sync).
      * @param request - Reconciliation request
@@ -509,7 +504,7 @@ export const ManualSyncLive = Layer.succeed(
      * @param config - Configuration for partial sync (ignored in manual sync)
      * @returns Effect that completes immediately
      */
-    partialSync: (config: PartialSyncConfig) => Effect.void,
+    partialSync: (_config: PartialSyncConfig) => Effect.void,
     /** Stream of conflicts (empty in manual sync) */
     conflicts: Stream.empty,
     /** Stream of status updates (always offline in manual sync) */
