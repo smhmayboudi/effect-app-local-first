@@ -1,19 +1,20 @@
 import { Effect } from "effect"
 import { describe, expect, it } from "vitest"
-import type { Hub, HubService, HubStrategy } from "../src/Hub.js"
+import type { Hub, HubService, HubStrategy as HubStrategyType } from "../src/Hub.js"
+import { HubStrategy } from "../src/Hub.js"
 
 describe("Hub System Tests", () => {
   describe("HubStrategy Union Type", () => {
     it("should define all hub strategies", () => {
-      const unbounded: HubStrategy = "unbounded"
-      const sliding: HubStrategy = "sliding"
-      const dropping: HubStrategy = "dropping"
-      const backpressure: HubStrategy = "backpressure"
+      const unbounded: HubStrategyType = HubStrategy.unbounded()
+      const sliding: HubStrategyType = HubStrategy.sliding(0)
+      const dropping: HubStrategyType = HubStrategy.dropping(0)
+      const backpressure: HubStrategyType = HubStrategy.backpressure(0)
 
-      expect(unbounded).toBe("unbounded")
-      expect(sliding).toBe("sliding")
-      expect(dropping).toBe("dropping")
-      expect(backpressure).toBe("backpressure")
+      expect(unbounded._tag).toBe("unbounded")
+      expect(sliding._tag).toBe("sliding")
+      expect(dropping._tag).toBe("dropping")
+      expect(backpressure._tag).toBe("backpressure")
     })
   })
 
@@ -21,7 +22,7 @@ describe("Hub System Tests", () => {
     it("should define createHub method", () => {
       // This is an interface test - verifying the structure
       const service: HubService = {
-        createHub: <T>(strategy?: HubStrategy) => {
+        createHub: <T>(_strategy?: HubStrategyType) => {
           return Effect.succeed(null as unknown as Hub<T>)
         }
       }
@@ -34,7 +35,7 @@ describe("Hub System Tests", () => {
     it("should define all required methods", () => {
       // This is an interface test - verifying the structure
       const hub: Hub<string> = {
-        publish: (message: string) => {
+        publish: (_message: string) => {
           return Effect.succeed(void 0)
         },
         subscribe: () => {
@@ -50,17 +51,17 @@ describe("Hub System Tests", () => {
     it("should support different message types", () => {
       // Test with different message types
       const stringHub: Hub<string> = {
-        publish: (message: string) => Effect.succeed(void 0),
+        publish: (_message: string) => Effect.succeed(void 0),
         subscribe: () => Effect.succeed(null as any)
       }
 
       const objHub: Hub<{ id: number; name: string }> = {
-        publish: (message: { id: number; name: string }) => Effect.succeed(void 0),
+        publish: (_message: { id: number; name: string }) => Effect.succeed(void 0),
         subscribe: () => Effect.succeed(null as any)
       }
 
       const complexHub: Hub<{ data: Array<string>; metadata: Record<string, unknown> }> = {
-        publish: (message: { data: Array<string>; metadata: Record<string, unknown> }) => Effect.succeed(void 0),
+        publish: (_message: { data: Array<string>; metadata: Record<string, unknown> }) => Effect.succeed(void 0),
         subscribe: () => Effect.succeed(null as any)
       }
 
@@ -73,31 +74,40 @@ describe("Hub System Tests", () => {
   describe("Hub Strategies", () => {
     it("should handle different buffering strategies", () => {
       // Test different strategies
-      const strategies: Array<HubStrategy> = ["unbounded", "sliding", "dropping", "backpressure"]
+      const strategies: Array<HubStrategyType> = [
+        HubStrategy.unbounded(),
+        HubStrategy.sliding(0),
+        HubStrategy.dropping(0),
+        HubStrategy.backpressure(0)
+      ]
 
-      strategies.forEach((strategy) => {
-        expect(["unbounded", "sliding", "dropping", "backpressure"]).toContain(strategy)
-      })
+      expect(strategies[0]._tag).toBe("unbounded")
+      expect(strategies[1]._tag).toBe("sliding")
+      expect(strategies[2]._tag).toBe("dropping")
+      expect(strategies[3]._tag).toBe("backpressure")
     })
 
     it("should support unbounded strategy", () => {
-      const strategy: HubStrategy = "unbounded"
-      expect(strategy).toBe("unbounded")
+      const strategy: HubStrategyType = HubStrategy.unbounded()
+      expect(strategy._tag).toBe("unbounded")
     })
 
     it("should support sliding strategy", () => {
-      const strategy: HubStrategy = "sliding"
-      expect(strategy).toBe("sliding")
+      const strategy: HubStrategyType = HubStrategy.sliding(0)
+      expect(strategy._tag).toBe("sliding")
+      expect(strategy.capacity).toBe(0)
     })
 
     it("should support dropping strategy", () => {
-      const strategy: HubStrategy = "dropping"
-      expect(strategy).toBe("dropping")
+      const strategy: HubStrategyType = HubStrategy.dropping(0)
+      expect(strategy._tag).toBe("dropping")
+      expect(strategy.capacity).toBe(0)
     })
 
     it("should support backpressure strategy", () => {
-      const strategy: HubStrategy = "backpressure"
-      expect(strategy).toBe("backpressure")
+      const strategy: HubStrategyType = HubStrategy.backpressure(0)
+      expect(strategy._tag).toBe("backpressure")
+      expect(strategy.capacity).toBe(0)
     })
   })
 
@@ -106,9 +116,9 @@ describe("Hub System Tests", () => {
       // Example of how a Hub would be used with Effect
       const exampleEffect = Effect.gen(function*($) {
         const hub = yield* $(Effect.succeed({
-          publish: (msg: string) => Effect.succeed(void 0),
+          publish: (_msg: string) => Effect.succeed(void 0),
           subscribe: () => Effect.succeed("stream")
-        } as Hub<string>))
+        }))
 
         yield* $(hub.publish("Hello, world!"))
         const stream = yield* $(hub.subscribe())
@@ -121,7 +131,7 @@ describe("Hub System Tests", () => {
     it("should handle concurrent publishing", () => {
       // This verifies the interface structure allows for concurrent operations
       const concurrentHub: Hub<number> = {
-        publish: (message: number) => {
+        publish: (_message: number) => {
           // In a real implementation, this would handle concurrent publishing
           return Effect.succeed(void 0)
         },
@@ -137,7 +147,7 @@ describe("Hub System Tests", () => {
     it("should support multiple subscribers pattern", () => {
       // Verification that the interface supports multiple subscribers
       const multiSubscriberHub: Hub<string> = {
-        publish: (message: string) => Effect.succeed(void 0),
+        publish: (_message: string) => Effect.succeed(void 0),
         subscribe: () => Effect.succeed(null as any) // Each call returns a separate stream
       }
 
@@ -155,12 +165,12 @@ describe("Hub System Tests", () => {
   describe("Hub Type Safety", () => {
     it("should maintain type safety for messages", () => {
       const stringHub: Hub<string> = {
-        publish: (message: string) => Effect.succeed(void 0),
+        publish: (_message: string) => Effect.succeed(void 0),
         subscribe: () => Effect.succeed(null as any)
       }
 
       const numberHub: Hub<number> = {
-        publish: (message: number) => Effect.succeed(void 0),
+        publish: (_message: number) => Effect.succeed(void 0),
         subscribe: () => Effect.succeed(null as any)
       }
 
@@ -172,7 +182,6 @@ describe("Hub System Tests", () => {
       expect(publishNumber).toBeDefined()
 
       // In a real test, you would ensure you can't publish wrong types:
-      // @ts-expect-error - This would fail type checking
       // stringHub.publish(123) // Should be a type error
     })
 
@@ -185,7 +194,7 @@ describe("Hub System Tests", () => {
       }
 
       const userHub: Hub<UserMessage> = {
-        publish: (message: UserMessage) => Effect.succeed(void 0),
+        publish: (_message: UserMessage) => Effect.succeed(void 0),
         subscribe: () => Effect.succeed(null as any)
       }
 
@@ -204,29 +213,35 @@ describe("Hub System Tests", () => {
   describe("Hub Service Integration", () => {
     it("should create hubs with different strategies", () => {
       const service: HubService = {
-        createHub: <T>(strategy?: HubStrategy) => {
+        createHub: <T>(_strategy?: HubStrategyType) => {
           return Effect.succeed({
-            publish: (message: T) => Effect.succeed(void 0),
-            subscribe: () => Effect.succeed(null as any)
-          } as Hub<T>)
+            publish: (_message: T) => Effect.succeed(void 0),
+            publishAll: (_messages: Iterable<T>) => Effect.succeed(void 0),
+            subscribe: () => Effect.succeed(null as any),
+            subscriberCount: () => Effect.succeed(0),
+            size: () => Effect.succeed(0)
+          })
         }
       }
 
       expect(service.createHub()).toBeDefined()
-      expect(service.createHub("unbounded")).toBeDefined()
-      expect(service.createHub("sliding")).toBeDefined()
-      expect(service.createHub("dropping")).toBeDefined()
-      expect(service.createHub("backpressure")).toBeDefined()
+      expect(service.createHub(HubStrategy.unbounded())).toBeDefined()
+      expect(service.createHub(HubStrategy.sliding(0))).toBeDefined()
+      expect(service.createHub(HubStrategy.dropping(0))).toBeDefined()
+      expect(service.createHub(HubStrategy.backpressure(0))).toBeDefined()
     })
 
     it("should support generic Hub creation", () => {
       const service: HubService = {
-        createHub: <T>(strategy?: HubStrategy) => {
+        createHub: <T>(_strategy?: HubStrategyType) => {
           // In a real implementation, strategy would affect hub behavior
           return Effect.succeed({
-            publish: (message: T) => Effect.succeed(void 0),
-            subscribe: () => Effect.succeed(null as any)
-          } as Hub<T>)
+            publish: (_message: T) => Effect.succeed(void 0),
+            publishAll: (_messages: Iterable<T>) => Effect.succeed(void 0),
+            subscribe: () => Effect.succeed(null as any),
+            subscriberCount: () => Effect.succeed(0),
+            size: () => Effect.succeed(0)
+          })
         }
       }
 

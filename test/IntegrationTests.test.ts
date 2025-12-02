@@ -9,7 +9,8 @@ import {
   RGACollection,
   TwoPhaseSetCollection
 } from "../src/Framework.js"
-import type { HubStrategy } from "../src/Hub.js"
+import type { HubStrategy as HubStrategyType } from "../src/Hub.js"
+import { HubStrategy } from "../src/Hub.js"
 import { type DatabaseConfig, JsonDataModel, type StorageQuery } from "../src/Storage.js"
 import { type ReconciliationRequest, type ReconciliationResponse, type SyncOperation } from "../src/Sync.js"
 
@@ -244,11 +245,17 @@ describe("Integration Tests - Complete System", () => {
     })
 
     it("should work with different hub strategies", () => {
-      const strategies: Array<HubStrategy> = ["unbounded", "sliding", "dropping", "backpressure"]
+      const strategies: Array<HubStrategyType> = [
+        HubStrategy.unbounded(),
+        HubStrategy.sliding(10),
+        HubStrategy.dropping(10),
+        HubStrategy.backpressure(10)
+      ]
 
-      strategies.forEach((strategy) => {
-        expect(["unbounded", "sliding", "dropping", "backpressure"]).toContain(strategy)
-      })
+      expect(strategies[0]._tag).toBe("unbounded")
+      expect(strategies[1]._tag).toBe("sliding")
+      expect(strategies[2]._tag).toBe("dropping")
+      expect(strategies[3]._tag).toBe("backpressure")
     })
   })
 

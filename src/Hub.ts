@@ -48,13 +48,45 @@ interface InternalHub<A> extends Hub<A> {
 }
 
 /**
- * Represents different strategies for hub capacity and behavior
+ * Base interface for Hub strategies
  */
-export type HubStrategy =
-  | { readonly _tag: "unbounded" }
-  | { readonly _tag: "sliding"; readonly capacity: number }
-  | { readonly _tag: "dropping"; readonly capacity: number }
-  | { readonly _tag: "backpressure"; readonly capacity: number }
+interface BaseHubStrategy {
+  readonly _tag: string
+}
+
+/**
+ * Represents different strategies for hub capacity and behavior using effect-ts patterns
+ */
+export interface UnboundedStrategy extends BaseHubStrategy {
+  readonly _tag: "unbounded"
+}
+
+export interface SlidingStrategy extends BaseHubStrategy {
+  readonly _tag: "sliding"
+  readonly capacity: number
+}
+
+export interface DroppingStrategy extends BaseHubStrategy {
+  readonly _tag: "dropping"
+  readonly capacity: number
+}
+
+export interface BackpressureStrategy extends BaseHubStrategy {
+  readonly _tag: "backpressure"
+  readonly capacity: number
+}
+
+export type HubStrategy = UnboundedStrategy | SlidingStrategy | DroppingStrategy | BackpressureStrategy
+
+/**
+ * Helper functions to create HubStrategy instances using effect-ts patterns
+ */
+export const HubStrategy = {
+  unbounded: (): UnboundedStrategy => ({ _tag: "unbounded" }),
+  sliding: (capacity: number): SlidingStrategy => ({ _tag: "sliding", capacity }),
+  dropping: (capacity: number): DroppingStrategy => ({ _tag: "dropping", capacity }),
+  backpressure: (capacity: number): BackpressureStrategy => ({ _tag: "backpressure", capacity })
+} as const
 
 /**
  * Error class for Hub-specific errors
@@ -299,13 +331,13 @@ export const backpressure = <A>(capacity: number): Effect.Effect<Hub<A>, never> 
  * Creates a hub based on the specified strategy
  */
 export const makeWithStrategy = <A>(strategy: HubStrategy): Effect.Effect<Hub<A>, never> =>
-  strategy._tag === "unbounded"
-    ? unbounded<A>()
-    : strategy._tag === "sliding"
+  strategy._tag === "sliding"
     ? sliding<A>(strategy.capacity)
     : strategy._tag === "dropping"
     ? dropping<A>(strategy.capacity)
-    : backpressure<A>(strategy.capacity)
+    : strategy._tag === "backpressure"
+    ? backpressure<A>(strategy.capacity)
+    : unbounded<A>()
 
 /**
  * Hub service for dependency injection
@@ -322,6 +354,6 @@ export const HubService = Context.GenericTag<HubService>("@core/HubService")
 export const HubServiceLive = Layer.succeed(
   HubService,
   {
-    createHub: <A>(strategy?: HubStrategy) => makeWithStrategy<A>(strategy ?? { _tag: "unbounded" })
+    createHub: <A>(strategy?: HubStrategy) => makeWithStrategy<A>(strategy ?? HubStrategy.unbounded())
   }
 )
