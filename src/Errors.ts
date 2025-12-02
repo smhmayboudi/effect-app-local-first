@@ -38,23 +38,9 @@ export class CRDTError extends Data.TaggedError("CRDTError")<{
 }> {}
 
 /**
- * Error class for network-related operations.
- * Thrown when there are issues with network connections or communication.
- */
-export class NetworkError extends Data.TaggedError("NetworkError")<{
-  /** The error message */
-  readonly message: string
-  /** The HTTP status code, if applicable */
-  readonly status?: number
-  /** The underlying cause of the error, if any */
-  readonly cause?: unknown
-}> {}
-
-/**
  * Union type representing all possible error types in the LocalFirst framework.
  */
 export type LocalFirstError =
   | StorageError
   | SyncError
   | CRDTError
-  | NetworkError
