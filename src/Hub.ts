@@ -31,12 +31,12 @@ export interface Hub<A> {
   /**
    * Get the current subscriber count
    */
-  readonly subscriberCount: () => Effect.Effect<number, never>
+  readonly subscriberCount: () => Effect.Effect<number>
 
   /**
    * Get the hub size (if applicable to the implementation)
    */
-  readonly size: () => Effect.Effect<number, never>
+  readonly size: () => Effect.Effect<number>
 }
 
 /**
@@ -100,7 +100,7 @@ export class HubError extends Data.TaggedError("HubError")<{
 /**
  * Creates an unbounded hub that can store an unlimited number of messages
  */
-export const unbounded = <A>(): Effect.Effect<Hub<A>, never> =>
+export const unbounded = <A>(): Effect.Effect<Hub<A>> =>
   Effect.gen(function*() {
     const queue = yield* Queue.unbounded<A>()
 
@@ -159,7 +159,7 @@ export const unbounded = <A>(): Effect.Effect<Hub<A>, never> =>
 /**
  * Creates a sliding hub with a fixed capacity that drops old messages when full
  */
-export const sliding = <A>(capacity: number): Effect.Effect<Hub<A>, never> =>
+export const sliding = <A>(capacity: number): Effect.Effect<Hub<A>> =>
   Effect.gen(function*() {
     const queue = yield* Queue.sliding<A>(capacity)
 
@@ -216,7 +216,7 @@ export const sliding = <A>(capacity: number): Effect.Effect<Hub<A>, never> =>
 /**
  * Creates a dropping hub with a fixed capacity that drops new messages when full
  */
-export const dropping = <A>(capacity: number): Effect.Effect<Hub<A>, never> =>
+export const dropping = <A>(capacity: number): Effect.Effect<Hub<A>> =>
   Effect.gen(function*() {
     const queue = yield* Queue.dropping<A>(capacity)
 
@@ -273,7 +273,7 @@ export const dropping = <A>(capacity: number): Effect.Effect<Hub<A>, never> =>
 /**
  * Creates a backpressure hub with a fixed capacity that blocks publishers when full
  */
-export const backpressure = <A>(capacity: number): Effect.Effect<Hub<A>, never> =>
+export const backpressure = <A>(capacity: number): Effect.Effect<Hub<A>> =>
   Effect.gen(function*() {
     const queue = yield* Queue.bounded<A>(capacity)
 
@@ -330,7 +330,7 @@ export const backpressure = <A>(capacity: number): Effect.Effect<Hub<A>, never> 
 /**
  * Creates a hub based on the specified strategy
  */
-export const makeWithStrategy = <A>(strategy: HubStrategy): Effect.Effect<Hub<A>, never> =>
+export const makeWithStrategy = <A>(strategy: HubStrategy): Effect.Effect<Hub<A>> =>
   strategy._tag === "sliding"
     ? sliding<A>(strategy.capacity)
     : strategy._tag === "dropping"
@@ -343,7 +343,7 @@ export const makeWithStrategy = <A>(strategy: HubStrategy): Effect.Effect<Hub<A>
  * Hub service for dependency injection
  */
 export interface HubService {
-  readonly createHub: <A>(strategy?: HubStrategy) => Effect.Effect<Hub<A>, never>
+  readonly createHub: <A>(strategy?: HubStrategy) => Effect.Effect<Hub<A>>
 }
 
 export const HubService = Context.GenericTag<HubService>("@core/HubService")
