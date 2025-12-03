@@ -1,26 +1,22 @@
-
 /**
- * Main entry point for the LocalFirst library.
- * This file exports all the major modules of the LocalFirst framework.
- */
-
-/**
- * Core Conflict-free Replicated Data Types (CRDTs) and distributed systems primitives.
+ * Vector Clock implementation for distributed systems.
+ * A vector clock is a data structure that provides a causal ordering of events in a distributed system.
+ * It maintains a logical clock per node/replica, allowing detection of causality between events.
  */
 export * as Core from "./Core.js"
 
 /**
- * Error types used throughout the LocalFirst framework.
+ * Error class for storage-related operations.
+ * Thrown when there are issues with reading from or writing to storage.
  */
 export * as Errors from "./Errors.js"
 
 /**
- * The main LocalFirst framework that provides distributed data structures and synchronization.
+ * Authorization and Access Control Types
  */
 export * as Framework from "./Framework.js"
 
 /**
- * Asynchronous message hub for publish-subscribe communication.
  * A Hub<A> is an asynchronous message hub that allows:
  *
  * - Publishers to send messages of type A
@@ -35,26 +31,55 @@ export * as Framework from "./Framework.js"
 export * as Hub from "./Hub.js"
 
 /**
- * Program module containing the main program entry point.
+ * Main program entry point.
+ * This file demonstrates a simple Effect program that logs "Hello, World!".
  */
 export * as Program from "./Program.js"
 
 /**
- * Storage abstraction layer supporting various backends like IndexedDB and in-memory storage.
+ * Data model interface for different storage systems.
+ * Defines how data is serialized to and deserialized from bytes.
  */
 export * as Storage from "./Storage.js"
 
 /**
- * Synchronization services for distributed data consistency across replicas.
+ * Represents a data conflict that occurs during synchronization.
+ * This class is used when local and remote values differ during sync operations.
  */
 export * as Sync from "./Sync.js"
 
 /**
- * Example application demonstrating Hub usage.
+ * Example demonstrating Collection Framework usage.
  */
-export * as HubApp from "./examples/HubApp.js"
+export * as CollectionExample from "./examples/CollectionExample.js"
 
 /**
- * Example Todo application demonstrating the LocalFirst framework.
+ * Example demonstrating CRDT (Conflict-free Replicated Data Types) usage.
  */
-export * as TodoApp from "./examples/TodoApp.js"
+export * as CrdtExample from "./examples/CrdtExample.js"
+
+/**
+ * Example demonstrating Hub (Pub/Sub) System usage.
+ */
+export * as HubExample from "./examples/HubExample.js"
+
+/**
+ * Comprehensive example demonstrating integration of multiple systems.
+ * This example shows how VectorClocks, CRDTs, Storage, Sync, and Collections work together.
+ */
+export * as IntegrationExample from "./examples/IntegrationExample.js"
+
+/**
+ * Example demonstrating Storage System usage.
+ */
+export * as StorageExample from "./examples/StorageExample.js"
+
+/**
+ * Example demonstrating Sync (Synchronization) System usage.
+ */
+export * as SyncExample from "./examples/SyncExample.js"
+
+/**
+ * Example demonstrating Vector Clock usage for tracking causality in distributed systems.
+ */
+export * as VectorClockExample from "./examples/VectorClockExample.js"
