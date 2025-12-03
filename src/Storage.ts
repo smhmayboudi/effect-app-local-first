@@ -160,7 +160,7 @@ export interface StorageService extends ExtendedStorageBackend {}
 /**
  * Context tag for the StorageService.
  */
-export const StorageService = Context.GenericTag<StorageService>("StorageService")
+export const StorageService = Context.GenericTag<StorageService>("@core/StorageService")
 
 /**
  * Default data model for storage, using JSON serialization.
@@ -178,10 +178,8 @@ export const IndexedDBLive = Layer.scoped(
       try: () =>
         new Promise<IDBDatabase>((resolve, reject) => {
           const request = indexedDB.open("LocalFirstDB", 1)
-
           request.onerror = () => reject(request.error)
           request.onsuccess = () => resolve(request.result)
-
           request.onupgradeneeded = () => {
             request.result.createObjectStore("data", { keyPath: "key" })
           }
@@ -206,7 +204,6 @@ export const IndexedDBLive = Layer.scoped(
         const transaction = db.transaction(["data"], mode)
         const store = transaction.objectStore("data")
         const request = operation(store)
-
         request.onsuccess = () => resume(Effect.succeed(request.result))
         request.onerror = () =>
           resume(
@@ -254,7 +251,6 @@ export const IndexedDBLive = Layer.scoped(
               emit(Effect.fail(EffectOption.some(error as StorageError)))
             }
           }, 1000)
-
           return Effect.sync(() => clearInterval(interval))
         }),
 
@@ -300,7 +296,7 @@ export const IndexedDBLive = Layer.scoped(
       setRaw: (key: string, data: Uint8Array) =>
         withTransaction("readwrite", (store) => store.put({ key, value: data })),
 
-      query: (query: StorageQuery) => Effect.succeed([]) // Placeholder implementation for IndexedDB
+      query: (_query: StorageQuery) => Effect.succeed([]) // Placeholder implementation for IndexedDB
     }
   })
 )
@@ -318,12 +314,12 @@ export const MemoryStorageLive = Layer.effect(
     return {
       // Original methods
       get: (key) =>
-        Effect.sync(() => {
-          if (!storage.has(key)) {
-            throw new StorageError({ message: `Key not found: ${key}` })
-          }
-          return storage.get(key)!
-        }),
+        Effect.sync(() => storage.get(key)).pipe(
+          Effect.filterOrFail(
+            (value) => value !== undefined,
+            () => new StorageError({ message: `Key not found: ${key}` })
+          )
+        ),
 
       set: (key, value) =>
         Effect.sync(() => {
@@ -350,12 +346,10 @@ export const MemoryStorageLive = Layer.effect(
           const listener = (value: unknown) => {
             emit(Effect.succeed(Chunk.of(value)))
           }
-
           if (!listeners.has(key)) {
             listeners.set(key, [])
           }
           listeners.get(key)!.push(listener)
-
           return Effect.sync(() => {
             const keyListeners = listeners.get(key) || []
             const index = keyListeners.indexOf(listener)
@@ -366,19 +360,20 @@ export const MemoryStorageLive = Layer.effect(
         }),
 
       // Extended methods
-      getWithModel: <T>(key: string, model: DataModel = defaultDataModel) => {
-        return Effect.sync(() => {
-          if (!storage.has(key)) {
-            throw new StorageError({ message: `Key not found: ${key}` })
-          }
-          const value = storage.get(key)!
-          if (value instanceof Uint8Array) {
-            return model.deserialize<T>(value)
-          } else {
-            return value as T
-          }
-        })
-      },
+      getWithModel: <T>(key: string, model: DataModel = defaultDataModel) =>
+        Effect.sync(() => storage.get(key)).pipe(
+          Effect.filterOrFail(
+            (value) => value !== undefined,
+            () => new StorageError({ message: `Key not found: ${key}` })
+          ),
+          Effect.map((value) => {
+            if (value instanceof Uint8Array) {
+              return model.deserialize<T>(value)
+            } else {
+              return value as T
+            }
+          })
+        ),
 
       setWithModel: (key: string, value: unknown, model: DataModel = defaultDataModel) => {
         return Effect.sync(() => {
@@ -390,20 +385,20 @@ export const MemoryStorageLive = Layer.effect(
         })
       },
 
-      getRaw: (key: string) => {
-        return Effect.sync(() => {
-          if (!storage.has(key)) {
-            throw new StorageError({ message: `Key not found: ${key}` })
-          }
-          const value = storage.get(key)!
-          if (value instanceof Uint8Array) {
-            return value
-          } else {
-            // Convert to raw bytes using JSON serialization
-            return new TextEncoder().encode(JSON.stringify(value))
-          }
-        })
-      },
+      getRaw: (key: string) =>
+        Effect.sync(() => storage.get(key)).pipe(
+          Effect.filterOrFail(
+            (value) => value !== undefined,
+            () => new StorageError({ message: `Key not found: ${key}` })
+          ),
+          Effect.map((value) => {
+            if (value instanceof Uint8Array) {
+              return value
+            } else {
+              return new TextEncoder().encode(JSON.stringify(value))
+            }
+          })
+        ),
 
       setRaw: (key: string, data: Uint8Array) => {
         return Effect.sync(() => {
@@ -414,7 +409,7 @@ export const MemoryStorageLive = Layer.effect(
         })
       },
 
-      query: (query: StorageQuery) => Effect.succeed([]) // Placeholder for memory storage
+      query: (_query: StorageQuery) => Effect.succeed([]) // Placeholder for memory storage
     }
   })
 )
